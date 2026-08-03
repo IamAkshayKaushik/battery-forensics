@@ -1,5 +1,9 @@
 package com.batteryforensics.shizuku
 
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import com.batteryforensics.parser.AlarmSummary
 import com.batteryforensics.parser.BatteryStatsSummary
 import com.batteryforensics.parser.DeviceIdleSummary
@@ -19,6 +23,7 @@ import com.batteryforensics.parser.power.PowerParser
 import com.batteryforensics.parser.power.WakeLockParser
 import com.batteryforensics.parser.thermalservice.ThermalServiceParser
 import com.batteryforensics.parser.usagestats.UsageStatsParser
+import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -26,56 +31,194 @@ import java.io.InputStreamReader
  * Shizuku availability facade. When unavailable, advanced dumpsys paths degrade gracefully.
  */
 sealed class ShizukuAvailability {
+    /** Binder up and app authorized — dumpsys path usable. */
     data object Available : ShizukuAvailability()
+    /** Shizuku manager package not found. */
     data object NotInstalled : ShizukuAvailability()
+    /** Manager present but server binder not reachable (not started). */
+    data object NotRunning : ShizukuAvailability()
+    /** Binder up but user has not granted this app. */
     data object PermissionDenied : ShizukuAvailability()
+    /** Pre-v11 or otherwise unusable. */
     data object Unsupported : ShizukuAvailability()
 }
 
-interface ShizukuGateway {
-    fun availability(): ShizukuAvailability
-    /** Executes a privileged shell command when Shizuku is granted; null when unavailable. */
-    fun runShellCommand(command: String): String?
+fun ShizukuAvailability.label(): String = when (this) {
+    ShizukuAvailability.Available -> "Authorized — dumpsys collectors active"
+    ShizukuAvailability.NotInstalled -> "Not installed"
+    ShizukuAvailability.NotRunning -> "Installed but not running — start Shizuku"
+    ShizukuAvailability.PermissionDenied -> "Running — not authorized"
+    ShizukuAvailability.Unsupported -> "Unsupported on this device"
+}
+
+fun ShizukuAvailability.limitedFeatures(): List<String> = when (this) {
+    ShizukuAvailability.Available -> emptyList()
+    else -> listOf(
+        "Doze / deviceidle depth",
+        "Wake lock attribution",
+        "AlarmManager wakeup packages",
+        "JobScheduler pending jobs",
+        "App Standby buckets",
+    )
 }
 
 /**
- * Default gateway using reflection so the app never crashes if Shizuku is missing.
- * When Available, runs `sh -c <command>` via Shizuku.newProcess.
- *
- * Permission limits: dumpsys still respects SELinux / service-side checks.
- * Some OEM builds redact fields even under Shizuku.
+ * Pure state mapping for tests and [GracefulShizukuGateway.availability].
+ * Binder-alive wins over package visibility gaps (API 30+ queries).
+ */
+fun resolveShizukuAvailability(
+    sdkInt: Int,
+    managerInstalled: Boolean,
+    binderAlive: Boolean,
+    preV11: Boolean,
+    permissionGranted: Boolean,
+): ShizukuAvailability {
+    if (sdkInt < Build.VERSION_CODES.P) return ShizukuAvailability.Unsupported
+    if (binderAlive) {
+        if (preV11) return ShizukuAvailability.Unsupported
+        return if (permissionGranted) {
+            ShizukuAvailability.Available
+        } else {
+            ShizukuAvailability.PermissionDenied
+        }
+    }
+    return when {
+        managerInstalled -> ShizukuAvailability.NotRunning
+        else -> ShizukuAvailability.NotInstalled
+    }
+}
+
+interface ShizukuGateway {
+    fun availability(context: Context): ShizukuAvailability
+    /** Executes a privileged shell command when Shizuku is granted; null when unavailable. */
+    fun runShellCommand(command: String): String?
+    fun requestPermission(requestCode: Int = REQUEST_CODE)
+    fun addPermissionResultListener(listener: Shizuku.OnRequestPermissionResultListener)
+    fun removePermissionResultListener(listener: Shizuku.OnRequestPermissionResultListener)
+    fun addBinderReceivedListener(listener: Shizuku.OnBinderReceivedListener)
+    fun removeBinderReceivedListener(listener: Shizuku.OnBinderReceivedListener)
+    fun addBinderDeadListener(listener: Shizuku.OnBinderDeadListener)
+    fun removeBinderDeadListener(listener: Shizuku.OnBinderDeadListener)
+    /** Launch intent for the Shizuku manager app, if installed. */
+    fun managerLaunchIntent(context: Context): Intent?
+
+    companion object {
+        const val REQUEST_CODE = 0xBF01
+        const val MANAGER_PACKAGE = "moe.shizuku.manager"
+        /** Legacy / alternate package id seen on some installs. */
+        const val LEGACY_MANAGER_PACKAGE = "moe.shizuku.privileged.api"
+        val MANAGER_PACKAGES = listOf(MANAGER_PACKAGE, LEGACY_MANAGER_PACKAGE)
+    }
+}
+
+/**
+ * Real Shizuku API for binder/permission; reflection only for [Shizuku.newProcess]
+ * (package-private / deprecated but still the practical dumpsys path on API 13.1.x).
  */
 class GracefulShizukuGateway : ShizukuGateway {
-    override fun availability(): ShizukuAvailability {
+    override fun availability(context: Context): ShizukuAvailability {
         return runCatching {
-            val clazz = Class.forName("rikka.shizuku.Shizuku")
-            val ping = clazz.getMethod("pingBinder").invoke(null) as Boolean
-            if (!ping) return ShizukuAvailability.NotInstalled
-            val permission = clazz.getMethod("checkSelfPermission").invoke(null) as Int
-            if (permission == 0) ShizukuAvailability.Available else ShizukuAvailability.PermissionDenied
-        }.getOrElse { ShizukuAvailability.NotInstalled }
+            val binderAlive = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+            val preV11 = runCatching { Shizuku.isPreV11() }.getOrDefault(false)
+            val permissionGranted = runCatching {
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            }.getOrDefault(false)
+            resolveShizukuAvailability(
+                sdkInt = Build.VERSION.SDK_INT,
+                managerInstalled = isManagerInstalled(context),
+                binderAlive = binderAlive,
+                preV11 = preV11,
+                permissionGranted = permissionGranted,
+            )
+        }.getOrElse {
+            if (isManagerInstalled(context)) ShizukuAvailability.NotRunning
+            else ShizukuAvailability.NotInstalled
+        }
     }
 
     override fun runShellCommand(command: String): String? {
-        if (availability() != ShizukuAvailability.Available) return null
         return runCatching {
-            val clazz = Class.forName("rikka.shizuku.Shizuku")
-            // Shizuku.newProcess(String[] cmd, String[] env, String dir)
-            val method = clazz.methods.firstOrNull {
+            if (!Shizuku.pingBinder()) return null
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return null
+            // newProcess is package-private; invoke via reflection while it remains available.
+            val method = Shizuku::class.java.declaredMethods.firstOrNull {
                 it.name == "newProcess" && it.parameterTypes.size >= 1
             } ?: return null
+            method.isAccessible = true
             val process = method.invoke(
                 null,
                 arrayOf("sh", "-c", command),
                 null,
                 null,
             ) as? Process ?: return null
-            process.inputStream.use { input ->
+            val stdout = process.inputStream.use { input ->
                 BufferedReader(InputStreamReader(input)).readText()
-            }.also {
-                runCatching { process.destroy() }
-            }.takeIf { it.isNotBlank() }
+            }
+            val stderr = runCatching {
+                process.errorStream.use { input ->
+                    BufferedReader(InputStreamReader(input)).readText()
+                }
+            }.getOrDefault("")
+            runCatching { process.destroy() }
+            stdout.takeIf { it.isNotBlank() } ?: stderr.takeIf { it.isNotBlank() }
         }.getOrNull()
+    }
+
+    override fun requestPermission(requestCode: Int) {
+        runCatching {
+            if (!Shizuku.pingBinder()) return
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) return
+            // Always request when binder is up — UI apps must show the Shizuku grant dialog.
+            Shizuku.requestPermission(requestCode)
+        }
+    }
+
+    override fun addPermissionResultListener(listener: Shizuku.OnRequestPermissionResultListener) {
+        runCatching { Shizuku.addRequestPermissionResultListener(listener) }
+    }
+
+    override fun removePermissionResultListener(listener: Shizuku.OnRequestPermissionResultListener) {
+        runCatching { Shizuku.removeRequestPermissionResultListener(listener) }
+    }
+
+    override fun addBinderReceivedListener(listener: Shizuku.OnBinderReceivedListener) {
+        runCatching { Shizuku.addBinderReceivedListenerSticky(listener) }
+    }
+
+    override fun removeBinderReceivedListener(listener: Shizuku.OnBinderReceivedListener) {
+        runCatching { Shizuku.removeBinderReceivedListener(listener) }
+    }
+
+    override fun addBinderDeadListener(listener: Shizuku.OnBinderDeadListener) {
+        runCatching { Shizuku.addBinderDeadListener(listener) }
+    }
+
+    override fun removeBinderDeadListener(listener: Shizuku.OnBinderDeadListener) {
+        runCatching { Shizuku.removeBinderDeadListener(listener) }
+    }
+
+    override fun managerLaunchIntent(context: Context): Intent? {
+        val pm = context.packageManager
+        for (pkg in ShizukuGateway.MANAGER_PACKAGES) {
+            val launch = pm.getLaunchIntentForPackage(pkg)
+            if (launch != null) return launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return null
+    }
+
+    private fun isManagerInstalled(context: Context): Boolean {
+        val pm = context.packageManager
+        return ShizukuGateway.MANAGER_PACKAGES.any { pkg ->
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getPackageInfo(pkg, 0)
+                }
+                true
+            }.getOrDefault(false)
+        }
     }
 }
 
@@ -98,14 +241,22 @@ class ShizukuDiagnosticsCollector(
         val usageStats: UsageStatsSummary? = null,
         val thermalService: ThermalServiceSummary? = null,
         val errors: List<String> = emptyList(),
-    )
+    ) {
+        val hasAnyData: Boolean
+            get() = batteryStats != null || power != null || wakeLocks != null ||
+                deviceIdle != null || doze != null || alarms != null ||
+                jobs != null || usageStats != null || thermalService != null
+    }
 
-    fun collect(): PrivilegedSnapshot {
-        val avail = gateway.availability()
+    fun collect(context: Context): PrivilegedSnapshot {
+        val avail = gateway.availability(context)
         if (avail != ShizukuAvailability.Available) {
             return PrivilegedSnapshot(
                 availability = avail,
-                errors = listOf("Shizuku unavailable ($avail) — using public API collectors only"),
+                errors = listOf(
+                    "Shizuku ${avail.label()} — using public API collectors only. " +
+                        "Limited: ${avail.limitedFeatures().joinToString()}",
+                ),
             )
         }
         val errors = mutableListOf<String>()
@@ -125,13 +276,14 @@ class ShizukuDiagnosticsCollector(
         }
 
         val powerRaw = dump("power")
+        val idleRaw = dump("deviceidle")
         return PrivilegedSnapshot(
             availability = avail,
             batteryStats = parse(dump("batterystats")) { BatteryStatsParser().parse(it) },
             power = parse(powerRaw) { PowerParser().parse(it) },
             wakeLocks = parse(powerRaw) { WakeLockParser().parse(it) },
-            deviceIdle = parse(dump("deviceidle")) { DeviceIdleParser().parse(it) },
-            doze = parse(gateway.runShellCommand("dumpsys deviceidle")) { DozeParser().parse(it) },
+            deviceIdle = parse(idleRaw) { DeviceIdleParser().parse(it) },
+            doze = parse(idleRaw) { DozeParser().parse(it) },
             alarms = parse(dump("alarm")) { AlarmParser().parse(it) },
             jobs = parse(dump("jobscheduler")) { JobSchedulerParser().parse(it) },
             usageStats = parse(dump("usagestats")) { UsageStatsParser().parse(it) },

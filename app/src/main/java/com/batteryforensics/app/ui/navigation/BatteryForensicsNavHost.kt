@@ -89,6 +89,9 @@ fun BatteryForensicsNavHost() {
                     onOpenThermal = { navController.navigate(AppDestination.Thermal.route) },
                     onOpenNetwork = { navController.navigate(AppDestination.Network.route) },
                     onOpenExport = { navController.navigate(AppDestination.Export.route) },
+                    onOpenDiagnostics = { navController.navigate(AppDestination.Diagnostics.route) },
+                    onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
+                    onOpenLive = { navController.navigate(AppDestination.LiveMonitor.route) },
                 )
             }
             composable(AppDestination.LiveMonitor.route) { LiveMonitorScreen() }

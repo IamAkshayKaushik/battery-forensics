@@ -11,6 +11,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Package visibility (API 30+): detect / launch Shizuku manager. Harmless on API 28. -->
+    <queries>
+        <package android:name="moe.shizuku.manager" />
+        <package android:name="moe.shizuku.privileged.api" />
+    </queries>
 
     <application
         android:name=".BatteryForensicsApp"
@@ -33,6 +40,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Required so Shizuku can deliver its binder (also declared in :shizuku). -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            tools:node="merge" />
 
         <provider
             android:name="androidx.startup.InitializationProvider"

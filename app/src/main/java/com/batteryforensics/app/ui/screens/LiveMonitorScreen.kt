@@ -13,48 +13,97 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.batteryforensics.app.ui.components.EmptyInvestigationHint
 import com.batteryforensics.app.ui.components.ForensicScreen
+import com.batteryforensics.app.ui.components.MetricRow
+import com.batteryforensics.app.ui.components.SectionHeader
+import com.batteryforensics.app.ui.components.StatusPanel
+import com.batteryforensics.app.ui.permissions.rememberPermissionController
 import com.batteryforensics.app.ui.viewmodel.LiveMonitorViewModel
 import com.batteryforensics.charts.MetricSparkline
+import com.batteryforensics.permissions.AppPermissions
 
 @Composable
 fun LiveMonitorScreen(viewModel: LiveMonitorViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val permissions = rememberPermissionController()
+
     ForensicScreen(
         title = "Live Monitor",
         subtitle = "Measured signals only. Derived conclusions appear under Causes.",
     ) {
+        val missingCellular = permissions.missingRuntime(AppPermissions.cellularRuntime)
+        if (missingCellular.isNotEmpty()) {
+            StatusPanel(
+                title = "Cellular forensics locked",
+                body = "Grant location + phone state to unlock RSSI / network-type evidence. On-device only — no maps, no upload.",
+                statusLabel = "NEEDS PERMISSION",
+                primaryAction = "Grant now",
+                onPrimary = { permissions.requestCellularPermissions() },
+                secondaryAction = "App Settings",
+                onSecondary = permissions.openAppSettings,
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
         val sample = state.latest
         if (sample == null) {
-            EmptyInvestigationHint("No samples yet. Capture now or keep periodic monitoring enabled.")
+            EmptyInvestigationHint(
+                "No samples yet. Capture now, enable periodic monitoring, or start Flight Recorder overnight.",
+            )
         } else {
-            Metric("Battery", "${sample.batteryPercent ?: "—"}%")
+            SectionHeader("Power", "Battery chemistry inputs from the system.")
+            MetricRow("Battery", "${sample.batteryPercent ?: "—"}%", "MEASURED")
             spark("Battery %", state.recent.mapNotNull { it.batteryPercent?.toFloat() })
-            Metric("Voltage", "${sample.voltageMv ?: "—"} mV")
-            Metric("Current", "${sample.currentMicroamps ?: "—"} µA")
-            Metric("Temperature", "${sample.temperatureC ?: "—"} °C")
+            MetricRow("Voltage", "${sample.voltageMv ?: "—"} mV", "MEASURED")
+            MetricRow("Current", "${sample.currentMicroamps ?: "—"} µA", "MEASURED")
+            MetricRow("Charge counter", "${sample.chargeCounterMah ?: "—"} mAh", "MEASURED")
+            MetricRow("Temperature", "${sample.temperatureC?.let { "%.1f".format(it) } ?: "—"} °C", "MEASURED")
             spark("Temperature", state.recent.mapNotNull { it.temperatureC })
-            Metric("Charging", "${sample.isCharging ?: "—"} (${sample.chargePlug ?: "unplugged"})")
-            Metric("Screen", if (sample.screenOn == true) "on" else "off")
-            Metric("Brightness", "${sample.brightnessPercent ?: "—"}%")
-            Metric("Refresh", "${sample.refreshRateHz ?: "—"} Hz")
-            Metric("Thermal status", "${sample.thermalStatus ?: "—"}")
-            Metric("Wi-Fi", "${sample.wifiConnected} / ${sample.wifiRssiDbm ?: "—"} dBm")
-            Metric("Cellular", "${sample.networkType ?: "—"} / ${sample.cellularRssiDbm ?: "—"} dBm")
+            MetricRow(
+                "Charging",
+                "${sample.isCharging ?: "—"} (${sample.chargePlug ?: "unplugged"})",
+                "MEASURED",
+            )
+
+            SectionHeader("Display", "Screen power correlates with drain.")
+            MetricRow("Screen", if (sample.screenOn == true) "on" else "off", "MEASURED")
+            MetricRow("Brightness", "${sample.brightnessPercent ?: "—"}%", "MEASURED")
+            MetricRow("Refresh", "${sample.refreshRateHz ?: "—"} Hz", "MEASURED")
+
+            SectionHeader("Thermal", "Heat wastes energy and throttles workloads.")
+            MetricRow("Thermal status", "${sample.thermalStatus ?: "—"}", "MEASURED")
+
+            SectionHeader("Radio", "Wi-Fi and cellular evidence for modem drain.")
+            MetricRow(
+                "Wi-Fi",
+                "${sample.wifiConnected} / ${sample.wifiRssiDbm ?: "—"} dBm",
+                "MEASURED",
+            )
+            MetricRow(
+                "Cellular",
+                if (sample.cellularRssiDbm != null || sample.networkType != null) {
+                    "${sample.networkType ?: "—"} / ${sample.cellularRssiDbm ?: "—"} dBm"
+                } else {
+                    "Unavailable — grant location + phone state"
+                },
+                if (sample.cellularRssiDbm != null) "MEASURED" else "LOCKED",
+            )
             spark(
                 "Cellular RSSI",
                 state.recent.mapNotNull { it.cellularRssiDbm?.toFloat() },
             )
+            spark(
+                "Wi-Fi RSSI",
+                state.recent.mapNotNull { it.wifiRssiDbm?.toFloat() },
+            )
         }
         Spacer(Modifier.height(16.dp))
-        TextButton(onClick = viewModel::captureNow) { Text("Capture sample") }
+        TextButton(onClick = {
+            permissions.requestMonitoringPermissions()
+            viewModel.captureNow()
+        }) {
+            Text("Capture sample")
+        }
     }
-}
-
-@Composable
-private fun Metric(label: String, value: String) {
-    Spacer(Modifier.height(8.dp))
-    Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-    Text(value, style = MaterialTheme.typography.bodyLarge)
 }
 
 @Composable

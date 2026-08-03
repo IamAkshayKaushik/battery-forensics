@@ -14,13 +14,13 @@
 | ruleengine | `com.batteryforensics.ruleengine` | Forensic rules + ranking (11 rules) |
 | diagnostics | `com.batteryforensics.diagnostics` | Investigation + DifferentialAnalyzer |
 | parser | `com.batteryforensics.parser` | dumpsys parsers (batterystats, power, deviceidle, alarm, jobs, usagestats, thermal) |
-| shizuku | `com.batteryforensics.shizuku` | Gateway + privileged dumpsys collector |
+| shizuku | `com.batteryforensics.shizuku` | Real Shizuku API + provider; dumpsys collector when authorized |
+| permissions | `com.batteryforensics.permissions` | Permission specs, rationales, grant helpers (see docs/PERMISSIONS.md) |
 | reporting | `com.batteryforensics.reporting` | ForensicReport builder |
 | ai | `com.batteryforensics.ai` | Markdown AI report |
 | export | `com.batteryforensics.export` | JSON / MD / CSV / HTML / ZIP / SQL |
 | timeline | `com.batteryforensics.timeline` | TimelineBuilder + overnight replay |
 | settings | `com.batteryforensics.settings` | DataStore preferences |
-| permissions | `com.batteryforensics.permissions` | Permission catalog |
 | charts | `com.batteryforensics.charts` | MetricSparkline (+ Vico deps available) |
 | statistics | `com.batteryforensics.statistics` | StatisticsEngine drain / MA / anomalies |
 | analytics | `com.batteryforensics.analytics` | NetworkForensics aggregation |
