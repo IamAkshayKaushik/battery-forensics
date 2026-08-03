@@ -1,0 +1,3 @@
+Wake Locks: size=3
+mWakeLocks.size=3
+Display Power: state=ON

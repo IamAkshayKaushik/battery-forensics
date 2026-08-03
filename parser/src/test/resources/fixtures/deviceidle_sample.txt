@@ -1,0 +1,4 @@
+mEnabled=true
+mForceIdle=false
+mState=ACTIVE
+mLightEnabled=true

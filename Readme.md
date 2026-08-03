@@ -139,33 +139,25 @@ The application never presents guesses as facts.
 
 ## Roadmap
 
-### Phase 1
+### Phase 1 — done
 
-* Live monitoring
-* Dashboard
-* Historical charts
-* Local database
+* Live monitoring, dashboard, local Room DB, sparklines
 
-### Phase 2
+### Phase 2 — done
 
-* Rule engine
-* Timeline
-* Differential analysis
-* Overnight diagnostics
+* Rule engine (11 rules), timeline + overnight replay, differential analysis
 
-### Phase 3
+### Phase 3 — mostly done
 
-* Shizuku diagnostics
-* Advanced parsers
-* Wake lock investigation
-* Doze analysis
+* Shizuku dumpsys collector + parsers (graceful without Shizuku)
+* Wake lock / Doze / Alarm / Jobs / UsageStats parsers
 
-### Phase 4
+### Phase 4 — in progress
 
-* AI exports
-* Battery chemistry
-* Predictive analytics
-* Plugin architecture
+* AI exports (full Markdown + multi-format bundle)
+* Battery chemistry engine
+* Statistics / anomaly hooks
+* Remaining: richer charts, GPS/BT/FGS attribution rules when evidence APIs allow
 
 ## Privacy
 

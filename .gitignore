@@ -1,0 +1,44 @@
+# Android / Gradle
+*.iml
+.gradle/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# IDE
+.idea/
+*.iws
+*.ipr
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kotlin
+.kotlin/
+
+# Secrets / local
+keystore.properties
+*.jks
+*.keystore
+google-services.json
+
+# Test / coverage
+**/build/
+test-results/
+coverage/
+*.exec
+
+# Misc
+*.log
+*.hprof

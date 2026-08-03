@@ -1,0 +1,4 @@
+Estimated battery capacity: 4500 mAh
+
+  Computed drain: 12.5 (560 mAh)
+  Screen: 4.2 (180 mAh) 12345 ms
