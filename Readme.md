@@ -110,6 +110,7 @@ Generate detailed Markdown reports suitable for ChatGPT, Claude, Gemini, Perplex
 * Kotlin
 * Jetpack Compose
 * Material 3 (phone bottom bar + tablet/landscape NavigationRail)
+* Vico charts on Live Monitor (battery %, temperature, cellular RSSI)
 * Clean Architecture
 * MVVM
 * Hilt
@@ -142,11 +143,11 @@ The application never presents guesses as facts.
 
 ### Phase 1 — done
 
-* Live monitoring, dashboard, local Room DB, sparklines
+* Live monitoring, dashboard, local Room DB, Vico charts + sparklines
 
 ### Phase 2 — done
 
-* Rule engine (31 rules), timeline + overnight replay, differential analysis (incl. privileged deltas)
+* Rule engine (31 rules), timeline + overnight replay, differential analysis (user-picked healthy/problem nights + privileged deltas)
 
 ### Phase 3 — mostly done
 
@@ -156,9 +157,10 @@ The application never presents guesses as facts.
 ### Phase 4 — in progress
 
 * AI exports (full Markdown + multi-format + `.bfz` bundle)
-* Battery chemistry engine
+* Battery chemistry engine (wear slope needs multi-day history)
 * Statistics / anomaly hooks
 * Remaining without root: continuous sensor HAL energy, Measured RRC, OEM-specific dump formats
+* Optional: device instrumentation / Macrobenchmark modules (Room smoke covered via Robolectric)
 
 ## Privacy
 

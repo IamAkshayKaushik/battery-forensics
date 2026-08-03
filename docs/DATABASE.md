@@ -1,10 +1,10 @@
 # Database schema
 
-Room database: `battery_forensics.db` (**version 2**)
+Room database: `battery_forensics.db` (**version 3**)
 
 ## Migration note
 
-v1→v2 adds monitoring columns. Debug builds use `fallbackToDestructiveMigration()` (see `docs/MONITORING.md`). Local samples are wiped on upgrade until a typed Migration ships.
+v1→v2 adds monitoring columns; v2→v3 adds `hdrActive`. Debug builds use `fallbackToDestructiveMigration()` (see `docs/MONITORING.md`). Local samples are wiped on upgrade until typed Migrations ship.
 
 ## `monitoring_samples`
 
@@ -36,6 +36,7 @@ v1→v2 adds monitoring columns. Debug builds use `fallbackToDestructiveMigratio
 | memoryPressure | TEXT? | |
 | storageFreeBytes | INTEGER? | |
 | storageFreePercent | REAL? | |
+| hdrActive | INTEGER? | bool; API 34+ when sampled |
 
 ## `timeline_events`
 

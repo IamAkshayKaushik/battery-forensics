@@ -39,7 +39,7 @@ Raw `dumpsys` never reaches the UI. Parsers emit typed models only.
 | StatisticsEngine | `:statistics` | Standby/screen drain, MA, anomaly hooks, baselines |
 | DifferentialAnalyzer | `:diagnostics` | Healthy vs problem window deltas |
 | TimelineBuilder | `:timeline` | Meaningful event log + overnight replay |
-| RuleEngine | `:ruleengine` | Ranked root causes (11 bundled rules) |
+| RuleEngine | `:ruleengine` | Ranked root causes (31 bundled rules) |
 | ShizukuDiagnosticsCollector | `:shizuku` | dumpsys → typed models when Shizuku granted |
 
 ## Rule engine

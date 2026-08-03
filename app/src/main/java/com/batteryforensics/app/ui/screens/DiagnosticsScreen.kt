@@ -1,18 +1,24 @@
 package com.batteryforensics.app.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.batteryforensics.app.ui.components.DiagnosisCard
 import com.batteryforensics.app.ui.components.EmptyInvestigationHint
-import com.batteryforensics.app.ui.components.EvidenceBlock
 import com.batteryforensics.app.ui.components.ForensicScreen
 import com.batteryforensics.app.ui.components.MetricRow
 import com.batteryforensics.app.ui.components.SectionHeader
@@ -20,6 +26,7 @@ import com.batteryforensics.app.ui.components.StatusPanel
 import com.batteryforensics.app.ui.permissions.rememberPermissionController
 import com.batteryforensics.app.ui.viewmodel.DiagnosticsViewModel
 import com.batteryforensics.app.ui.viewmodel.DifferentialViewModel
+import com.batteryforensics.diagnostics.NightWindow
 import com.batteryforensics.permissions.AppPermissions
 
 @Composable
@@ -43,9 +50,37 @@ fun DiagnosticsScreen(
                 permissions.requestMonitoringPermissions()
                 if (!state.investigating) viewModel.investigate()
             },
-            secondaryAction = "Compare nights",
-            onSecondary = differentialViewModel::compareNights,
         )
+
+        Spacer(Modifier.height(16.dp))
+        SectionHeader(
+            "Differential — pick nights",
+            "Healthy baseline vs problem overnight (22:00–08:00 local). Picks persist on-device.",
+        )
+        Text("Healthy night", style = MaterialTheme.typography.titleSmall)
+        NightChipRow(
+            nights = diff.nights,
+            selectedId = diff.healthyNightId,
+            onSelect = differentialViewModel::selectHealthy,
+            contentDescPrefix = "Healthy",
+        )
+        MetricRow("Healthy samples", diff.healthySampleCount.toString(), "MEASURED")
+        Spacer(Modifier.height(8.dp))
+        Text("Problem night", style = MaterialTheme.typography.titleSmall)
+        NightChipRow(
+            nights = diff.nights,
+            selectedId = diff.problemNightId,
+            onSelect = differentialViewModel::selectProblem,
+            contentDescPrefix = "Problem",
+        )
+        MetricRow("Problem samples", diff.problemSampleCount.toString(), "MEASURED")
+        TextButton(
+            onClick = differentialViewModel::compareNights,
+            enabled = !diff.comparing,
+            modifier = Modifier.semantics { contentDescription = "Compare selected nights" },
+        ) {
+            Text(if (diff.comparing) "Comparing…" else "Compare selected nights")
+        }
 
         Spacer(Modifier.height(16.dp))
         state.privileged?.let { priv ->
@@ -80,8 +115,7 @@ fun DiagnosticsScreen(
         }
 
         diff.report?.let { report ->
-            SectionHeader("Differential analysis")
-            Text(report.summary, style = MaterialTheme.typography.bodyMedium)
+            SectionHeader("Differential analysis", report.summary)
             Text(
                 report.confidence.name,
                 style = MaterialTheme.typography.labelLarge,
@@ -111,25 +145,34 @@ fun DiagnosticsScreen(
         } else {
             SectionHeader("Ranked causes", "${state.diagnoses.size} hypotheses with evidence")
             state.diagnoses.forEach { d ->
-                EvidenceBlock(
-                    title = d.title,
-                    subtitle = "${d.probabilityPercent}% · ${d.confidence.starsLabel} · ${d.category}",
-                    lines = buildList {
-                        add(d.explanation)
-                        d.evidence.forEach { e ->
-                            add("• [${e.confidenceLevel}] ${e.description}: ${e.observedValue}")
-                        }
-                        if (d.counterEvidence.isNotEmpty()) {
-                            add("Counter-evidence:")
-                            d.counterEvidence.forEach { e ->
-                                add("• ${e.description}: ${e.observedValue}")
-                            }
-                        }
-                        add("Actions:")
-                        d.recommendedActions.forEach { add("→ $it") }
-                    },
-                )
+                DiagnosisCard(diagnosis = d)
             }
         }
     }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun NightChipRow(
+    nights: List<NightWindow>,
+    selectedId: String?,
+    onSelect: (String) -> Unit,
+    contentDescPrefix: String,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        nights.take(5).forEach { night ->
+            FilterChip(
+                selected = night.id == selectedId,
+                onClick = { onSelect(night.id) },
+                label = { Text(night.label.substringBefore(" (").ifBlank { night.label }) },
+                modifier = Modifier.semantics {
+                    contentDescription = "$contentDescPrefix ${night.label}"
+                },
+            )
+        }
+    }
+    Spacer(Modifier.size(4.dp))
 }

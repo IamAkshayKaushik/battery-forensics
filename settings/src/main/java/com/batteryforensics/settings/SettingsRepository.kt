@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.batteryforensics.core.time.TimeConstants
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -24,6 +25,10 @@ data class UserSettings(
     val advancedDiagnosticsEnabled: Boolean = true,
     /** First-run auto permission prompt already shown once. */
     val initialPermissionPromptShown: Boolean = false,
+    /** Persisted NightWindow.id for differential healthy baseline (e.g. night-1). */
+    val healthyNightWindowId: String? = null,
+    /** Persisted NightWindow.id for differential problem window (e.g. night-0). */
+    val problemNightWindowId: String? = null,
 )
 
 @Singleton
@@ -36,6 +41,8 @@ class SettingsRepository @Inject constructor(
     private val setupBannerKey = booleanPreferencesKey("setup_banner_dismissed")
     private val advancedDiagKey = booleanPreferencesKey("advanced_diagnostics")
     private val initialPromptKey = booleanPreferencesKey("initial_permission_prompt_shown")
+    private val healthyNightKey = stringPreferencesKey("healthy_night_window_id")
+    private val problemNightKey = stringPreferencesKey("problem_night_window_id")
 
     val settings: Flow<UserSettings> = context.dataStore.data.map { prefs ->
         UserSettings(
@@ -45,6 +52,8 @@ class SettingsRepository @Inject constructor(
             setupBannerDismissed = prefs[setupBannerKey] ?: false,
             advancedDiagnosticsEnabled = prefs[advancedDiagKey] ?: true,
             initialPermissionPromptShown = prefs[initialPromptKey] ?: false,
+            healthyNightWindowId = prefs[healthyNightKey],
+            problemNightWindowId = prefs[problemNightKey],
         )
     }
 
@@ -70,5 +79,13 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setInitialPermissionPromptShown(shown: Boolean) {
         context.dataStore.edit { it[initialPromptKey] = shown }
+    }
+
+    suspend fun setHealthyNightWindowId(id: String) {
+        context.dataStore.edit { it[healthyNightKey] = id }
+    }
+
+    suspend fun setProblemNightWindowId(id: String) {
+        context.dataStore.edit { it[problemNightKey] = id }
     }
 }

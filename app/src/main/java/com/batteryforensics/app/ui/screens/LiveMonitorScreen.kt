@@ -2,11 +2,11 @@ package com.batteryforensics.app.ui.screens
 
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -18,13 +18,27 @@ import com.batteryforensics.app.ui.components.SectionHeader
 import com.batteryforensics.app.ui.components.StatusPanel
 import com.batteryforensics.app.ui.permissions.rememberPermissionController
 import com.batteryforensics.app.ui.viewmodel.LiveMonitorViewModel
-import com.batteryforensics.charts.MetricSparkline
+import com.batteryforensics.charts.ChartSamplePoint
+import com.batteryforensics.charts.ChartSeriesBuilder
+import com.batteryforensics.charts.ForensicMetricCharts
 import com.batteryforensics.permissions.AppPermissions
 
 @Composable
 fun LiveMonitorScreen(viewModel: LiveMonitorViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val permissions = rememberPermissionController()
+    val chartSeries = remember(state.recent) {
+        ChartSeriesBuilder.fromPoints(
+            state.recent.map {
+                ChartSamplePoint(
+                    timestampEpochMs = it.timestampEpochMs,
+                    batteryPercent = it.batteryPercent?.toFloat(),
+                    temperatureC = it.temperatureC,
+                    cellularRssiDbm = it.cellularRssiDbm?.toFloat(),
+                )
+            },
+        )
+    }
 
     ForensicScreen(
         title = "Live Monitor",
@@ -50,14 +64,16 @@ fun LiveMonitorScreen(viewModel: LiveMonitorViewModel = hiltViewModel()) {
                 "No samples yet. Capture now, enable periodic monitoring, or start Flight Recorder overnight.",
             )
         } else {
+            SectionHeader("Trends", "Vico charts from recent measured samples.")
+            ForensicMetricCharts(series = chartSeries)
+            Spacer(Modifier.height(12.dp))
+
             SectionHeader("Power", "Battery chemistry inputs from the system.")
             MetricRow("Battery", "${sample.batteryPercent ?: "—"}%", "MEASURED")
-            spark("Battery %", state.recent.mapNotNull { it.batteryPercent?.toFloat() })
             MetricRow("Voltage", "${sample.voltageMv ?: "—"} mV", "MEASURED")
             MetricRow("Current", "${sample.currentMicroamps ?: "—"} µA", "MEASURED")
             MetricRow("Charge counter", "${sample.chargeCounterMah ?: "—"} mAh", "MEASURED")
             MetricRow("Temperature", "${sample.temperatureC?.let { "%.1f".format(it) } ?: "—"} °C", "MEASURED")
-            spark("Temperature", state.recent.mapNotNull { it.temperatureC })
             MetricRow(
                 "Charging",
                 "${sample.isCharging ?: "—"} (${sample.chargePlug ?: "unplugged"})",
@@ -87,14 +103,6 @@ fun LiveMonitorScreen(viewModel: LiveMonitorViewModel = hiltViewModel()) {
                 },
                 if (sample.cellularRssiDbm != null) "MEASURED" else "LOCKED",
             )
-            spark(
-                "Cellular RSSI",
-                state.recent.mapNotNull { it.cellularRssiDbm?.toFloat() },
-            )
-            spark(
-                "Wi-Fi RSSI",
-                state.recent.mapNotNull { it.wifiRssiDbm?.toFloat() },
-            )
         }
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = {
@@ -104,12 +112,4 @@ fun LiveMonitorScreen(viewModel: LiveMonitorViewModel = hiltViewModel()) {
             Text("Capture sample")
         }
     }
-}
-
-@Composable
-private fun spark(label: String, values: List<Float>) {
-    if (values.size < 2) return
-    Spacer(Modifier.height(4.dp))
-    Text("$label trend", style = MaterialTheme.typography.labelMedium)
-    MetricSparkline(values = values)
 }

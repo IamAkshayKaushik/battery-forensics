@@ -12,6 +12,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -123,10 +125,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             Spacer(Modifier.height(10.dp))
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(20.dp))
         SectionHeader("Advanced diagnostics (Shizuku)")
-        Text(
-            when (state.shizuku) {
+        StatusPanel(
+            title = "Shizuku",
+            body = when (state.shizuku) {
                 ShizukuAvailability.Available ->
                     "Authorized. Investigate runs dumpsys → typed parsers for Doze, wake locks, alarms, jobs."
                 ShizukuAvailability.NotInstalled ->
@@ -138,45 +141,35 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 ShizukuAvailability.Unsupported ->
                     "This Shizuku version or device is unsupported (need Shizuku v11+)."
             },
-            style = MaterialTheme.typography.bodyMedium,
+            statusLabel = state.shizukuLabel,
+            primaryAction = when (state.shizuku) {
+                ShizukuAvailability.PermissionDenied -> "Authorize Shizuku"
+                ShizukuAvailability.Available -> "Re-check authorization"
+                ShizukuAvailability.NotRunning, ShizukuAvailability.NotInstalled -> "Open Shizuku"
+                ShizukuAvailability.Unsupported -> null
+            },
+            onPrimary = when (state.shizuku) {
+                ShizukuAvailability.PermissionDenied, ShizukuAvailability.Available ->
+                    viewModel::requestShizukuPermission
+                ShizukuAvailability.NotRunning, ShizukuAvailability.NotInstalled ->
+                    viewModel::openShizukuManager
+                ShizukuAvailability.Unsupported -> null
+            },
         )
-        Spacer(Modifier.height(8.dp))
-        MetricRow("Status", state.shizukuLabel, "CHECKED ON RESUME")
         if (state.shizukuLimited.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
             MetricRow(
                 "Limited without Shizuku",
                 state.shizukuLimited.joinToString(),
                 "FALLBACK",
             )
         }
+        Spacer(Modifier.height(8.dp))
         Text("Use advanced diagnostics when available", style = MaterialTheme.typography.titleMedium)
         Switch(
             checked = state.settings.advancedDiagnosticsEnabled,
             onCheckedChange = viewModel::setAdvancedDiagnostics,
+            modifier = Modifier.semantics { contentDescription = "Toggle advanced diagnostics" },
         )
-        when (state.shizuku) {
-            ShizukuAvailability.PermissionDenied, ShizukuAvailability.Available -> {
-                TextButton(onClick = viewModel::requestShizukuPermission) {
-                    Text(
-                        if (state.shizuku == ShizukuAvailability.Available) {
-                            "Re-check authorization"
-                        } else {
-                            "Authorize Shizuku"
-                        },
-                    )
-                }
-            }
-            ShizukuAvailability.NotRunning -> {
-                TextButton(onClick = viewModel::openShizukuManager) {
-                    Text("Open Shizuku — start the service")
-                }
-            }
-            ShizukuAvailability.NotInstalled -> {
-                TextButton(onClick = viewModel::openShizukuManager) {
-                    Text("Open / install Shizuku")
-                }
-            }
-            ShizukuAvailability.Unsupported -> Unit
-        }
     }
 }

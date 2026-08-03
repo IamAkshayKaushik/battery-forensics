@@ -31,10 +31,11 @@ class ReportBuilder {
         timelineNotes: List<String> = defaultTimeline(samples),
         historicalNotes: List<String> = emptyList(),
         differentialNotes: List<String> = listOf(
-            "Use in-app Differential Analysis to compare a healthy night vs a problem night.",
+            "Use in-app Differential Analysis: pick Healthy vs Problem overnight windows (22:00–08:00).",
         ),
         chartRefs: List<String> = listOf(
-            "In-app: Live Monitor sparklines (battery %, temp, current)",
+            "In-app: Live Monitor Vico charts (battery %, temperature, cellular RSSI)",
+            "In-app: MetricSparkline available for compact teasers",
             "In-app: Timeline / overnight replay for event markers",
         ),
     ): ForensicReport = ForensicReport(

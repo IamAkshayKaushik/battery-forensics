@@ -6,7 +6,10 @@ import android.content.Context
 import com.batteryforensics.analytics.NetworkForensics
 import com.batteryforensics.battery.ChemistryEngine
 import com.batteryforensics.diagnostics.DifferentialAnalyzer
+import com.batteryforensics.diagnostics.NightWindow
+import com.batteryforensics.diagnostics.NightWindowFinder
 import com.batteryforensics.monitoring.MonitoringRepository
+import com.batteryforensics.settings.SettingsRepository
 import com.batteryforensics.shizuku.ShizukuDiagnosticsCollector
 import com.batteryforensics.thermal.ThermalAnalyzer
 import com.batteryforensics.timeline.PrivilegedTimelineInput
@@ -18,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -213,34 +217,130 @@ class TimelineViewModel @Inject constructor(
 }
 
 data class DifferentialUiState(
+    val nights: List<NightWindow> = emptyList(),
+    val healthyNightId: String? = null,
+    val problemNightId: String? = null,
+    val healthySampleCount: Int = 0,
+    val problemSampleCount: Int = 0,
     val report: DifferentialAnalyzer.DifferentialReport? = null,
     val message: String? = null,
+    val comparing: Boolean = false,
 )
 
 @HiltViewModel
 class DifferentialViewModel @Inject constructor(
     private val monitoringRepository: MonitoringRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DifferentialUiState())
     val uiState: StateFlow<DifferentialUiState> = _uiState.asStateFlow()
 
-    /** Compares previous night (24–48h ago) vs last night (0–24h). */
-    fun compareNights() {
+    init {
+        refreshWindows()
+    }
+
+    fun refreshWindows() {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            val day = 24 * 60 * 60 * 1000L
-            val problem = monitoringRepository.samplesBetween(now - day, now)
-            val healthy = monitoringRepository.samplesBetween(now - 2 * day, now - day)
+            val nights = NightWindowFinder.candidateNights(now)
+            val lookbackStart = nights.lastOrNull()?.startEpochMs ?: (now - 7 * 24 * 60 * 60 * 1000L)
+            val samples = monitoringRepository.samplesBetween(lookbackStart, now)
+            val prefs = settingsRepository.settings.first()
+            val defaultPair = NightWindowFinder.defaultHealthyAndProblem(nights, samples)
+            val healthyId = prefs.healthyNightWindowId
+                ?.takeIf { id -> nights.any { it.id == id } }
+                ?: defaultPair?.healthy?.id
+            val problemId = prefs.problemNightWindowId
+                ?.takeIf { id -> nights.any { it.id == id } }
+                ?: defaultPair?.problem?.id
+            val healthy = nights.firstOrNull { it.id == healthyId }
+            val problem = nights.firstOrNull { it.id == problemId }
+            _uiState.update {
+                it.copy(
+                    nights = nights,
+                    healthyNightId = healthyId,
+                    problemNightId = problemId,
+                    healthySampleCount = healthy?.let { NightWindowFinder.samplesIn(samples, it).size } ?: 0,
+                    problemSampleCount = problem?.let { NightWindowFinder.samplesIn(samples, it).size } ?: 0,
+                    message = null,
+                )
+            }
+        }
+    }
+
+    fun selectHealthy(nightId: String) {
+        viewModelScope.launch {
+            settingsRepository.setHealthyNightWindowId(nightId)
+            _uiState.update { it.copy(healthyNightId = nightId, report = null) }
+            refreshSampleCounts()
+        }
+    }
+
+    fun selectProblem(nightId: String) {
+        viewModelScope.launch {
+            settingsRepository.setProblemNightWindowId(nightId)
+            _uiState.update { it.copy(problemNightId = nightId, report = null) }
+            refreshSampleCounts()
+        }
+    }
+
+    private suspend fun refreshSampleCounts() {
+        val state = _uiState.value
+        val now = System.currentTimeMillis()
+        val lookbackStart = state.nights.lastOrNull()?.startEpochMs ?: (now - 7 * 24 * 60 * 60 * 1000L)
+        val samples = monitoringRepository.samplesBetween(lookbackStart, now)
+        val healthy = state.nights.firstOrNull { it.id == state.healthyNightId }
+        val problem = state.nights.firstOrNull { it.id == state.problemNightId }
+        _uiState.update {
+            it.copy(
+                healthySampleCount = healthy?.let { NightWindowFinder.samplesIn(samples, it).size } ?: 0,
+                problemSampleCount = problem?.let { NightWindowFinder.samplesIn(samples, it).size } ?: 0,
+            )
+        }
+    }
+
+    /** Compares user-picked healthy vs problem overnight windows (22:00–08:00). */
+    fun compareNights() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(comparing = true, message = null) }
+            val state = _uiState.value
+            val healthyWin = state.nights.firstOrNull { it.id == state.healthyNightId }
+            val problemWin = state.nights.firstOrNull { it.id == state.problemNightId }
+            if (healthyWin == null || problemWin == null) {
+                _uiState.update {
+                    it.copy(comparing = false, message = "Pick a healthy night and a problem night to compare.")
+                }
+                return@launch
+            }
+            if (healthyWin.id == problemWin.id) {
+                _uiState.update {
+                    it.copy(comparing = false, message = "Healthy and problem windows must be different nights.")
+                }
+                return@launch
+            }
+            val healthy = monitoringRepository.samplesBetween(healthyWin.startEpochMs, healthyWin.endEpochMs)
+            val problem = monitoringRepository.samplesBetween(problemWin.startEpochMs, problemWin.endEpochMs)
             if (problem.size < 3 || healthy.size < 3) {
                 _uiState.update {
-                    DifferentialUiState(
-                        message = "Need samples in both windows (healthy=${healthy.size}, problem=${problem.size}).",
+                    it.copy(
+                        comparing = false,
+                        healthySampleCount = healthy.size,
+                        problemSampleCount = problem.size,
+                        message = "Need ≥3 samples in both windows (healthy=${healthy.size}, problem=${problem.size}). " +
+                            "Start Flight Recorder overnight, then compare.",
+                        report = null,
                     )
                 }
                 return@launch
             }
             _uiState.update {
-                DifferentialUiState(report = DifferentialAnalyzer.compare(healthy, problem))
+                it.copy(
+                    comparing = false,
+                    healthySampleCount = healthy.size,
+                    problemSampleCount = problem.size,
+                    report = DifferentialAnalyzer.compare(healthy, problem),
+                    message = null,
+                )
             }
         }
     }

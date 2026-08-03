@@ -25,5 +25,5 @@ Core battery/display/radio plus expanded signals (all nullable / best-effort):
 
 ## Room schema
 
-- Database version **2** adds the expanded columns.
-- Debug uses `fallbackToDestructiveMigration()` (documented here). Production should add a typed `Migration` once the schema stabilizes — upgrading wipes local samples on v1→v2.
+- Database version **3** adds `hdrActive` (API 34+ Display HDR sampling when available).
+- Debug uses `fallbackToDestructiveMigration()` (documented here). Production should add a typed `Migration` once the schema stabilizes — upgrading wipes local samples across major schema bumps.

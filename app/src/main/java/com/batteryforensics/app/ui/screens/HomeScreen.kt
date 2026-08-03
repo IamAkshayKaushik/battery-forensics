@@ -20,12 +20,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.batteryforensics.app.ui.components.DiagnosisCard
 import com.batteryforensics.app.ui.components.EmptyInvestigationHint
-import com.batteryforensics.app.ui.components.EvidenceBlock
 import com.batteryforensics.app.ui.components.ForensicScreen
+import com.batteryforensics.app.ui.components.MetricChipRow
 import com.batteryforensics.app.ui.components.MetricRow
 import com.batteryforensics.app.ui.components.SectionHeader
 import com.batteryforensics.app.ui.components.StatusPanel
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.heightIn
 import com.batteryforensics.app.ui.permissions.rememberPermissionController
 import com.batteryforensics.app.ui.viewmodel.HomeViewModel
 import com.batteryforensics.monitoring.service.FlightRecorderService
@@ -83,7 +87,17 @@ fun HomeScreen(
             Spacer(Modifier.height(16.dp))
         }
 
-        SectionHeader("Investigation summary", "Live snapshot of what the recorder knows right now.")
+        SectionHeader("Investigation HQ", "Status → ranked causes → evidence. Everything stays on this device.")
+        MetricChipRow(
+            buildList {
+                add("Samples" to state.sampleCount.toString())
+                state.latestBatteryPercent?.let { add("Battery" to "$it%") }
+                state.latestTempC?.let { add("Temp" to "${"%.1f".format(it)}°C") }
+                state.overallDrainLabel?.let { add("Drain 12h" to it) }
+                state.overnightDrainLabel?.let { add("Standby" to it) }
+            },
+        )
+        Spacer(Modifier.height(8.dp))
         MetricRow("Samples captured", state.sampleCount.toString(), "MEASURED")
         state.latestBatteryPercent?.let {
             MetricRow("Latest battery", "$it%", "MEASURED")
@@ -140,14 +154,9 @@ fun HomeScreen(
 
         if (state.topCauses.isNotEmpty()) {
             Spacer(Modifier.height(20.dp))
-            SectionHeader("Top causes (teaser)", "Full evidence on the Causes tab.")
+            SectionHeader("Top causes", "Tap a card for the full Causes investigation.")
             state.topCauses.forEach { d ->
-                EvidenceBlock(
-                    title = d.title,
-                    subtitle = "${d.probabilityPercent}% · ${d.confidence.starsLabel}",
-                    lines = listOf(d.explanation.take(160) + if (d.explanation.length > 160) "…" else ""),
-                    onClick = onOpenDiagnostics,
-                )
+                DiagnosisCard(diagnosis = d, onClick = onOpenDiagnostics)
             }
         } else {
             Spacer(Modifier.height(16.dp))
@@ -194,10 +203,22 @@ fun HomeScreen(
         )
 
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = viewModel::captureNow, modifier = Modifier.fillMaxWidth()) {
+        TextButton(
+            onClick = viewModel::captureNow,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = "Capture sample now" },
+        ) {
             Text("Capture sample now")
         }
-        TextButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
+        TextButton(
+            onClick = onOpenDiagnostics,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = "Investigate causes" },
+        ) {
             Text("Investigate causes")
         }
 
@@ -217,8 +238,10 @@ private fun FocusLink(title: String, detail: String, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 12.dp)
+            .semantics { contentDescription = "Open $title" },
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(title, style = MaterialTheme.typography.titleMedium)
