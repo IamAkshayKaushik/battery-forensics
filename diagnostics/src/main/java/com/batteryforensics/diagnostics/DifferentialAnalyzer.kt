@@ -3,6 +3,7 @@ package com.batteryforensics.diagnostics
 import com.batteryforensics.core.evidence.ConfidenceLevel
 import com.batteryforensics.core.model.MonitoringSample
 import com.batteryforensics.core.time.TimeConstants
+import com.batteryforensics.ruleengine.PrivilegedEvidence
 import com.batteryforensics.statistics.DrainStats
 import kotlin.math.abs
 
@@ -33,6 +34,8 @@ object DifferentialAnalyzer {
     fun compare(
         healthy: List<MonitoringSample>,
         problem: List<MonitoringSample>,
+        healthyPrivileged: PrivilegedEvidence? = null,
+        problemPrivileged: PrivilegedEvidence? = null,
     ): DifferentialReport {
         val h = summarize(healthy)
         val p = summarize(problem)
@@ -48,6 +51,7 @@ object DifferentialAnalyzer {
             addDelta("radio_active_estimate_min", "Radio-active estimate", h.radioActiveMinutes, p.radioActiveMinutes, "min") { a, b -> abs(b - a) }
             addDelta("charging_ratio", "Charging ratio", h.chargingRatio, p.chargingRatio, "") { a, b -> abs(b - a) }
             addDelta("deep_idle_proxy", "Deep-idle proxy (screen-off quiet)", h.deepIdleProxy, p.deepIdleProxy, "") { a, b -> abs(b - a) }
+            addPrivilegedDeltas(healthyPrivileged, problemPrivileged)
         }.sortedByDescending { it.magnitude }
 
         val top = deltas.take(3).joinToString("; ") { "${it.label}: ${it.deltaDisplay}" }
@@ -67,6 +71,28 @@ object DifferentialAnalyzer {
             },
             confidence = level,
         )
+    }
+
+    private fun MutableList<MetricDelta>.addPrivilegedDeltas(
+        healthy: PrivilegedEvidence?,
+        problem: PrivilegedEvidence?,
+    ) {
+        if (healthy == null || problem == null) return
+        val hAlarms = healthy.alarms?.wakeupAlarmCount?.toDouble()
+        val pAlarms = problem.alarms?.wakeupAlarmCount?.toDouble()
+        addDelta("alarm_wakeups", "Alarm wakeups", hAlarms, pAlarms, "") { a, b -> abs(b - a) }
+
+        val hWl = healthy.wakeLocks?.totalLocks?.toDouble()
+        val pWl = problem.wakeLocks?.totalLocks?.toDouble()
+        addDelta("wake_lock_count", "Wake lock count", hWl, pWl, "") { a, b -> abs(b - a) }
+
+        val hMotion = healthy.doze?.motionTriggeredInterruptions?.toDouble()
+        val pMotion = problem.doze?.motionTriggeredInterruptions?.toDouble()
+        addDelta("doze_motion_interrupts", "Doze motion interrupts", hMotion, pMotion, "") { a, b -> abs(b - a) }
+
+        val hLoc = healthy.doze?.locationTriggeredInterruptions?.toDouble()
+        val pLoc = problem.doze?.locationTriggeredInterruptions?.toDouble()
+        addDelta("doze_location_interrupts", "Doze location interrupts", hLoc, pLoc, "") { a, b -> abs(b - a) }
     }
 
     private data class WindowSummary(

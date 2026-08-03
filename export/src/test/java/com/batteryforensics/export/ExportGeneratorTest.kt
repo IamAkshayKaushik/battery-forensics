@@ -87,4 +87,45 @@ class ExportGeneratorTest {
         assertThat(artifacts.first { it.format == ExportFormat.SQLITE_SNAPSHOT }.content).contains("SQL TEXT")
         assertThat(AiReportGenerator().toMarkdown(report)).contains("Don't guess")
     }
+
+    @Test
+    fun exportsCompressedBfzBundle() {
+        val report = ForensicReport(
+            generatedAtEpochMs = 1L,
+            device = DeviceInfo("Test", "Device", "14", 34),
+            sampleCount = 1,
+            samples = listOf(
+                MonitoringSample(
+                    timestampEpochMs = 1L,
+                    batteryPercent = 50,
+                    voltageMv = 3800,
+                    currentMicroamps = -200000,
+                    chargeCounterMah = 2000,
+                    temperatureC = 35f,
+                    isCharging = false,
+                    chargePlug = null,
+                    screenOn = false,
+                    brightnessPercent = 20,
+                    refreshRateHz = 60f,
+                    thermalStatus = 0,
+                    wifiConnected = true,
+                    wifiRssiDbm = -50,
+                    cellularRssiDbm = null,
+                    networkType = "lte",
+                ),
+            ),
+            diagnoses = emptyList(),
+            unknownFactors = emptyList(),
+        )
+        val artifacts = ExportGenerator().export(report, setOf(ExportFormat.BFZ))
+        assertThat(artifacts).hasSize(1)
+        val bfz = artifacts.first()
+        assertThat(bfz.format).isEqualTo(ExportFormat.BFZ)
+        assertThat(bfz.fileName).endsWith(".bfz")
+        assertThat(bfz.bytes).isNotNull()
+        assertThat(bfz.bytes!!.size).isGreaterThan(20)
+        // gzip magic
+        assertThat(bfz.bytes!![0]).isEqualTo(0x1f.toByte())
+        assertThat(bfz.bytes!![1]).isEqualTo(0x8b.toByte())
+    }
 }

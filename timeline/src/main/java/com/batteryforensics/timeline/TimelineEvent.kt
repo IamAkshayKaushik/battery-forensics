@@ -21,6 +21,21 @@ data class TimelineEvent(
 )
 
 /**
+ * Privileged dumpsys-derived hints for timeline ingest.
+ * Kept as a lightweight DTO so :timeline does not depend on :parser.
+ */
+data class PrivilegedTimelineInput(
+    val referenceEpochMs: Long = 0L,
+    val dozeState: String? = null,
+    val dozeHistoryHints: List<String> = emptyList(),
+    val motionInterruptions: Int = 0,
+    val locationInterruptions: Int = 0,
+    val alarmWakeups: Int? = null,
+    val topAlarmPackages: List<String> = emptyList(),
+    val gmsWakeupHints: List<String> = emptyList(),
+)
+
+/**
  * Builds a chronological flight-recorder style event log.
  * Emits meaningful transitions only — not every sample.
  */
@@ -29,6 +44,7 @@ object TimelineBuilder {
     fun build(
         samples: List<MonitoringSample>,
         diagnoses: List<Diagnosis> = emptyList(),
+        privileged: PrivilegedTimelineInput? = null,
     ): List<TimelineEvent> {
         val ordered = samples.sortedBy { it.timestampEpochMs }
         if (ordered.isEmpty()) return emptyList()
@@ -54,6 +70,8 @@ object TimelineBuilder {
             prev = curr
         }
 
+        events += privilegedEvents(privileged, ordered.last().timestampEpochMs)
+
         diagnoses.forEach { d ->
             val ts = ordered.last().timestampEpochMs
             events += TimelineEvent(
@@ -78,6 +96,75 @@ object TimelineBuilder {
         )
 
         return events.sortedBy { it.timestampEpochMs }
+    }
+
+    private fun privilegedEvents(
+        privileged: PrivilegedTimelineInput?,
+        fallbackTs: Long,
+    ): List<TimelineEvent> {
+        if (privileged == null) return emptyList()
+        val ts = privileged.referenceEpochMs.takeIf { it > 0 } ?: fallbackTs
+        return buildList {
+            if (!privileged.dozeState.isNullOrBlank() || privileged.dozeHistoryHints.isNotEmpty()) {
+                add(
+                    TimelineEvent(
+                        timestampEpochMs = ts,
+                        eventType = "DOZE_STATE",
+                        title = "Doze state ${privileged.dozeState ?: "unknown"}",
+                        detail = "Hints: ${privileged.dozeHistoryHints.joinToString().ifBlank { "—" }}",
+                        severity = if (privileged.dozeState.equals("ACTIVE", true)) {
+                            TimelineSeverity.WARNING
+                        } else {
+                            TimelineSeverity.NOTICE
+                        },
+                    ),
+                )
+            }
+            if (privileged.motionInterruptions > 0) {
+                add(
+                    TimelineEvent(
+                        timestampEpochMs = ts,
+                        eventType = "DOZE_MOTION_INTERRUPT",
+                        title = "Motion-triggered Doze exits",
+                        detail = "${privileged.motionInterruptions} motion interrupt hint(s) from dumpsys",
+                        severity = TimelineSeverity.WARNING,
+                    ),
+                )
+            }
+            if (privileged.locationInterruptions > 0) {
+                add(
+                    TimelineEvent(
+                        timestampEpochMs = ts,
+                        eventType = "DOZE_LOCATION_INTERRUPT",
+                        title = "Location-triggered Doze exits",
+                        detail = "${privileged.locationInterruptions} location interrupt hint(s) from dumpsys",
+                        severity = TimelineSeverity.WARNING,
+                    ),
+                )
+            }
+            privileged.alarmWakeups?.let { count ->
+                add(
+                    TimelineEvent(
+                        timestampEpochMs = ts,
+                        eventType = "ALARM_WAKEUPS",
+                        title = "Alarm wakeups ~$count",
+                        detail = "Top: ${privileged.topAlarmPackages.take(3).joinToString().ifBlank { "—" }}",
+                        severity = if (count >= 40) TimelineSeverity.WARNING else TimelineSeverity.NOTICE,
+                    ),
+                )
+            }
+            if (privileged.gmsWakeupHints.isNotEmpty()) {
+                add(
+                    TimelineEvent(
+                        timestampEpochMs = ts,
+                        eventType = "GMS_WAKEUP",
+                        title = "GMS wakeup attribution",
+                        detail = privileged.gmsWakeupHints.take(5).joinToString(),
+                        severity = TimelineSeverity.NOTICE,
+                    ),
+                )
+            }
+        }
     }
 
     /** Overnight drain replay: screen-off heavy window condensed to meaningful events. */

@@ -20,6 +20,30 @@ class TimelineBuilderTest {
         assertThat(events.size).isLessThan(samples.size * 3)
     }
 
+    @Test
+    fun build_ingestsPrivilegedDozeAlarmAndGmsEvents() {
+        val samples = listOf(
+            sample(0, pct = 90, screen = false, charging = false, network = "lte"),
+            sample(60_000, pct = 89, screen = false, charging = false, network = "lte"),
+        )
+        val privileged = PrivilegedTimelineInput(
+            referenceEpochMs = 60_000,
+            dozeState = "ACTIVE",
+            dozeHistoryHints = listOf("IDLE", "ACTIVE", "IDLE_MAINTENANCE"),
+            motionInterruptions = 2,
+            locationInterruptions = 1,
+            alarmWakeups = 48,
+            topAlarmPackages = listOf("com.example.sync"),
+            gmsWakeupHints = listOf("com.google.android.gms"),
+        )
+        val events = TimelineBuilder.build(samples, privileged = privileged)
+        assertThat(events.any { it.eventType == "DOZE_STATE" }).isTrue()
+        assertThat(events.any { it.eventType == "DOZE_MOTION_INTERRUPT" }).isTrue()
+        assertThat(events.any { it.eventType == "DOZE_LOCATION_INTERRUPT" }).isTrue()
+        assertThat(events.any { it.eventType == "ALARM_WAKEUPS" }).isTrue()
+        assertThat(events.any { it.eventType == "GMS_WAKEUP" }).isTrue()
+    }
+
     private fun sample(
         t: Long,
         pct: Int,

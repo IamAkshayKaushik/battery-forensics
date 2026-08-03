@@ -40,6 +40,11 @@ data class MonitoringSample(
     val memoryPressure: String? = null,
     val storageFreeBytes: Long? = null,
     val storageFreePercent: Float? = null,
+    /**
+     * Best-effort HDR active hint. On most devices this is unavailable without
+     * privileged/display dump access — treat as Measured only when collector set it.
+     */
+    val hdrActive: Boolean? = null,
 )
 
 @Serializable

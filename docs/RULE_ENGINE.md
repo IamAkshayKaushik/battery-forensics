@@ -21,7 +21,7 @@ Each triggered evaluation must produce a `Diagnosis` with evidence, confidence l
 
 Privileged dumpsys never claims Measured for RRC/modem state machines — use Derived/Inferred.
 
-## Bundled rules (`DefaultRules.all()`)
+## Bundled rules (`DefaultRules.all()`) — 31 rules
 
 ### Sample-based
 
@@ -40,22 +40,25 @@ Privileged dumpsys never claims Measured for RRC/modem state machines — use De
 13. bluetooth_left_on_drain
 14. hotspot_on_drain
 15. display_120hz_screen_on
-16. thermal_runaway_ish
-17. charging_inefficiency_heat
-18. baseline_anomaly_regression (Inferred; needs baselineSamples)
-19. nfc_left_on_drain (Speculative)
-20. low_storage_pressure
+16. display_static_120hz_inferred (Inferred; Android has no static-content API)
+17. display_hdr_active_drain (Measured when hdrActive sampled; API 34+)
+18. thermal_runaway_ish
+19. charging_inefficiency_heat
+20. baseline_anomaly_regression (Inferred; needs baselineSamples)
+21. nfc_left_on_drain (Speculative)
+22. low_storage_pressure
 
 ### Privileged (Shizuku dumpsys → RuleContext.privileged)
 
-21. doze_failure_to_enter
-22. frequent_doze_exits
-23. alarm_storm
-24. wake_lock_abuse
-25. app_standby_bypass
-26. fgs_abuse
-27. gms_wakeup_pattern (Inferred)
-28. jobscheduler_thrash
+23. doze_failure_to_enter
+24. frequent_doze_exits
+25. doze_motion_location_interrupts
+26. alarm_storm
+27. wake_lock_abuse
+28. app_standby_bypass
+29. fgs_abuse
+30. gms_wakeup_pattern (Inferred)
+31. jobscheduler_thrash
 
 ### Skipped (no signal)
 

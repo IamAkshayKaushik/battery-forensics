@@ -27,6 +27,8 @@ object ThermalAnalyzer {
         val events: List<ThermalEvent>,
         val confidence: ConfidenceLevel,
         val notes: List<String>,
+        /** Inferred CPU/SoC runaway — not a Measured CPU power counter. */
+        val cpuRunawaySuspected: Boolean = false,
     )
 
     fun analyze(samples: List<MonitoringSample>, windowStartMs: Long? = null, windowEndMs: Long? = null): ThermalReport {
@@ -54,7 +56,8 @@ object ThermalAnalyzer {
         val throttling = (peakStatus != null && peakStatus >= 2) ||
             (maxTemp != null && maxTemp >= TimeConstants.ELEVATED_TEMP_C + 5f)
 
-        val events = buildEvents(ordered, heating, cooling, throttling, peakStatus)
+        val cpuRunaway = detectCpuRunaway(ordered, heating, peakStatus)
+        val events = buildEvents(ordered, heating, cooling, throttling, peakStatus, cpuRunaway)
 
         val level = when {
             temps.size >= 6 -> ConfidenceLevel.MEASURED
@@ -68,6 +71,9 @@ object ThermalAnalyzer {
                 add("PowerManager thermal status unavailable below API 29 or not reported")
             }
             add("Heating/cooling rates are Derived from ΔT/Δt between samples")
+            if (cpuRunaway) {
+                add("CPU runaway is Inferred (hot + rising while screen-off/not charging/strong-ish radio)")
+            }
         }
 
         return ThermalReport(
@@ -82,7 +88,31 @@ object ThermalAnalyzer {
             events = events,
             confidence = level,
             notes = notes,
+            cpuRunawaySuspected = cpuRunaway,
         )
+    }
+
+    /**
+     * Inferred CPU/SoC runaway: rapid heat + elevated thermal status while screen-off,
+     * not charging, and cellular RSSI not in deep weak-signal modem-heat territory.
+     * Android does not expose a Measured CPU watt counter to unprivileged apps.
+     */
+    fun detectCpuRunaway(
+        samples: List<MonitoringSample>,
+        heatingRate: Double?,
+        peakStatus: Int?,
+    ): Boolean {
+        if (samples.size < 3) return false
+        val hotWindow = samples.takeLast(samples.size.coerceAtMost(6))
+        val screenOff = hotWindow.all { it.screenOn != true }
+        val notCharging = hotWindow.all { it.isCharging != true }
+        val maxTemp = hotWindow.mapNotNull { it.temperatureC }.maxOrNull() ?: return false
+        val avgRssi = hotWindow.mapNotNull { it.cellularRssiDbm }.average().takeIf { !it.isNaN() }
+        val weakModem = avgRssi != null && avgRssi <= TimeConstants.WEAK_SIGNAL_DBM_THRESHOLD
+        val rising = heatingRate != null && heatingRate >= RAPID_HEAT_C_PER_MIN
+        val statusHot = peakStatus != null && peakStatus >= 2
+        val veryHot = maxTemp >= TimeConstants.ELEVATED_TEMP_C + 5f
+        return screenOff && notCharging && rising && (statusHot || veryHot) && !weakModem
     }
 
     /** Max positive °C / minute over consecutive samples. */
@@ -128,6 +158,7 @@ object ThermalAnalyzer {
         cooling: Double?,
         throttling: Boolean,
         peakStatus: Int?,
+        cpuRunaway: Boolean,
     ): List<ThermalEvent> {
         val events = mutableListOf<ThermalEvent>()
         if (heating != null && heating >= RAPID_HEAT_C_PER_MIN) {
@@ -138,6 +169,16 @@ object ThermalAnalyzer {
                 detail = "Heating rate ${"%.2f".format(heating)}°C/min",
                 temperatureC = peak?.temperatureC,
                 confidence = ConfidenceLevel.DERIVED,
+            )
+        }
+        if (cpuRunaway) {
+            val peak = ordered.maxByOrNull { it.temperatureC ?: Float.MIN_VALUE }
+            events += ThermalEvent(
+                timestampEpochMs = peak?.timestampEpochMs ?: ordered.last().timestampEpochMs,
+                type = "CPU_RUNAWAY",
+                detail = "Inferred CPU/SoC runaway: rapid heat while screen-off/not charging without deep weak-signal modem signature",
+                temperatureC = peak?.temperatureC,
+                confidence = ConfidenceLevel.INFERRED,
             )
         }
         if (cooling != null && cooling >= RAPID_COOL_C_PER_MIN) {

@@ -36,6 +36,7 @@ data class MonitoringSampleEntity(
     val memoryPressure: String? = null,
     val storageFreeBytes: Long? = null,
     val storageFreePercent: Float? = null,
+    val hdrActive: Boolean? = null,
 )
 
 @Entity(tableName = "timeline_events")

@@ -211,6 +211,115 @@ class HighRefreshWhileScreenOnRule : ForensicRule {
     }
 }
 
+/**
+ * Inferred static-content 120 Hz drain.
+ * Android does not expose a Measured "static vs scrolling" signal — we use stable brightness
+ * + sustained ≥120 Hz while screen-on as a proxy and label Inferred with an explicit caveat.
+ */
+class Static120HzInferredRule : ForensicRule {
+    override val id: String = "display_static_120hz_inferred"
+    override val title: String = "120 Hz on likely-static content (Inferred)"
+
+    override fun evaluate(context: RuleContext): RuleEvaluation? {
+        val screenOn = context.samples.filter { it.screenOn == true }
+        if (screenOn.size < 6) return null
+        val rates = screenOn.mapNotNull { it.refreshRateHz }
+        if (rates.size < 6) return null
+        val highRatio = rates.count { it >= TimeConstants.HIGH_REFRESH_DEDICATED_HZ }.toDouble() / rates.size
+        if (highRatio < 0.7) return null
+        val brightness = screenOn.mapNotNull { it.brightnessPercent }
+        if (brightness.size < 4) return null
+        val mean = brightness.average()
+        val stable = brightness.all { kotlin.math.abs(it - mean) <= 8.0 }
+        if (!stable) return null
+        val score = (62 + highRatio * 20).toInt().coerceIn(62, 84)
+        return RuleEvaluation(
+            triggered = true,
+            diagnosis = Diagnosis(
+                id = id,
+                title = title,
+                category = DiagnosticCategory.DISPLAY,
+                explanation =
+                    "Screen-on samples show ≥120 Hz for ${"%.0f".format(highRatio * 100)}% with nearly stable brightness " +
+                        "(±8%). Android does not expose a Measured static-content flag — this is Inferred " +
+                        "panel-waste risk when high refresh persists without interaction cues.",
+                confidence = Confidence(score, ConfidenceLevel.INFERRED),
+                evidence = listOf(
+                    Evidence(
+                        id = "static_120_proxy",
+                        description = "Sustained 120 Hz with stable brightness",
+                        metricKey = "refresh_rate_hz",
+                        observedValue = "${"%.0f".format(highRatio * 100)}% ≥120 Hz; brightness σ proxy stable",
+                        threshold = "≥70% at 120 Hz + brightness within ±8",
+                        confidenceLevel = ConfidenceLevel.INFERRED,
+                    ),
+                ),
+                supportingMetrics = listOf(
+                    SupportingMetric("avg_brightness", "Avg brightness", "${"%.0f".format(mean)}%"),
+                ),
+                counterEvidence = listOf(
+                    Evidence(
+                        id = "static_caveat",
+                        description = "No Measured static-content API — gaming/video can also hold 120 Hz",
+                        metricKey = "api_limit",
+                        observedValue = "Inferred only",
+                        confidenceLevel = ConfidenceLevel.INFERRED,
+                    ),
+                ),
+                recommendedActions = listOf(
+                    "Force 60 Hz in display settings for reading/mail",
+                    "Disable peak refresh / adaptive high refresh if OEM exposes it",
+                ),
+                probabilityPercent = score,
+            ),
+        )
+    }
+}
+
+/** HDR active samples raise panel power — Measured only when hdrActive was collected. */
+class HdrActiveDrainRule : ForensicRule {
+    override val id: String = "display_hdr_active_drain"
+    override val title: String = "HDR active display drain"
+
+    override fun evaluate(context: RuleContext): RuleEvaluation? {
+        val screenOn = context.samples.filter { it.screenOn == true }
+        val hdr = screenOn.count { it.hdrActive == true }
+        if (hdr < 3) return null
+        val ratio = hdr.toDouble() / screenOn.size.coerceAtLeast(1)
+        if (ratio < 0.4) return null
+        val score = (70 + ratio * 20).toInt().coerceIn(70, 90)
+        return RuleEvaluation(
+            triggered = true,
+            diagnosis = Diagnosis(
+                id = id,
+                title = title,
+                category = DiagnosticCategory.DISPLAY,
+                explanation =
+                    "HDR appeared active for ${"%.0f".format(ratio * 100)}% of screen-on samples. " +
+                        "HDR raises panel backlight / tone-map cost — Measured when the collector reports hdrActive.",
+                confidence = Confidence(score, ConfidenceLevel.MEASURED),
+                evidence = listOf(
+                    Evidence(
+                        id = "hdr_active",
+                        description = "HDR active ratio while screen-on",
+                        metricKey = "hdr_active",
+                        observedValue = "${"%.0f".format(ratio * 100)}%",
+                        threshold = "≥40% of screen-on samples",
+                        confidenceLevel = ConfidenceLevel.MEASURED,
+                    ),
+                ),
+                supportingMetrics = emptyList(),
+                counterEvidence = emptyList(),
+                recommendedActions = listOf(
+                    "Avoid HDR streaming on battery when possible",
+                    "Lower brightness during HDR playback",
+                ),
+                probabilityPercent = score,
+            ),
+        )
+    }
+}
+
 /** Extreme ΔT/Δt distinct from mild rapid heat. */
 class ThermalRunawayIshRule : ForensicRule {
     override val id: String = "thermal_runaway_ish"

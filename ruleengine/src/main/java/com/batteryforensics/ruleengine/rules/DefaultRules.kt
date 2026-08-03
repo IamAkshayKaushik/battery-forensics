@@ -739,6 +739,8 @@ object DefaultRules {
         BluetoothLeftOnDrainRule(),
         HotspotOnDrainRule(),
         HighRefreshWhileScreenOnRule(),
+        Static120HzInferredRule(),
+        HdrActiveDrainRule(),
         ThermalRunawayIshRule(),
         ChargingInefficiencyHeatRule(),
         BaselineAnomalyRegressionRule(),
@@ -747,6 +749,7 @@ object DefaultRules {
         // Privileged dumpsys-based
         DozeFailureRule(),
         FrequentDozeExitsRule(),
+        DozeMotionLocationInterruptRule(),
         AlarmStormRule(),
         WakeLockAbuseRule(),
         AppStandbyBypassRule(),

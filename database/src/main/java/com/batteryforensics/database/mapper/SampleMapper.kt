@@ -34,6 +34,7 @@ fun MonitoringSampleEntity.toDomain(): MonitoringSample = MonitoringSample(
     memoryPressure = memoryPressure,
     storageFreeBytes = storageFreeBytes,
     storageFreePercent = storageFreePercent,
+    hdrActive = hdrActive,
 )
 
 fun MonitoringSample.toEntity(): MonitoringSampleEntity = MonitoringSampleEntity(
@@ -67,4 +68,5 @@ fun MonitoringSample.toEntity(): MonitoringSampleEntity = MonitoringSampleEntity
     memoryPressure = memoryPressure,
     storageFreeBytes = storageFreeBytes,
     storageFreePercent = storageFreePercent,
+    hdrActive = hdrActive,
 )

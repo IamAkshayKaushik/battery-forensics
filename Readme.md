@@ -102,13 +102,14 @@ Generate detailed Markdown reports suitable for ChatGPT, Claude, Gemini, Perplex
 * Markdown
 * HTML
 * ZIP diagnostic bundle
-* SQLite snapshot
+* Compressed `.bfz` bundle (gzip of ZIP)
+* SQLite snapshot (SQL text; Room `.db` optional inside ZIP)
 
 ## Technology
 
 * Kotlin
 * Jetpack Compose
-* Material 3
+* Material 3 (phone bottom bar + tablet/landscape NavigationRail)
 * Clean Architecture
 * MVVM
 * Hilt
@@ -145,19 +146,19 @@ The application never presents guesses as facts.
 
 ### Phase 2 — done
 
-* Rule engine (11 rules), timeline + overnight replay, differential analysis
+* Rule engine (31 rules), timeline + overnight replay, differential analysis (incl. privileged deltas)
 
 ### Phase 3 — mostly done
 
 * Shizuku dumpsys collector + parsers (graceful without Shizuku)
-* Wake lock / Doze / Alarm / Jobs / UsageStats parsers
+* Wake lock taxonomy / Doze motion-location / Alarm RTC vs ELAPSED / App Standby buckets
 
 ### Phase 4 — in progress
 
-* AI exports (full Markdown + multi-format bundle)
+* AI exports (full Markdown + multi-format + `.bfz` bundle)
 * Battery chemistry engine
 * Statistics / anomaly hooks
-* Remaining: richer charts, GPS/BT/FGS attribution rules when evidence APIs allow
+* Remaining without root: continuous sensor HAL energy, Measured RRC, OEM-specific dump formats
 
 ## Privacy
 
@@ -183,6 +184,8 @@ Priority areas include:
 * Charts
 * Documentation
 * Testing
+
+See also: [docs/PARSER.md](docs/PARSER.md), [docs/STATISTICS.md](docs/STATISTICS.md), [docs/RULE_ENGINE.md](docs/RULE_ENGINE.md).
 
 ## License
 

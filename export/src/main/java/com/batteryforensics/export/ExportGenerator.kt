@@ -5,6 +5,7 @@ import com.batteryforensics.reporting.ForensicReport
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -15,6 +16,8 @@ enum class ExportFormat {
     HTML,
     ZIP,
     SQLITE_SNAPSHOT,
+    /** Gzip-compressed ZIP diagnostic bundle (.bfz). */
+    BFZ,
 }
 
 data class ExportArtifact(
@@ -66,8 +69,24 @@ class ExportGenerator(
                 )
                 ExportFormat.ZIP -> zipBundle(report, roomDbBytes)
                 ExportFormat.SQLITE_SNAPSHOT -> sqliteSnapshot(report)
+                ExportFormat.BFZ -> bfzBundle(report, roomDbBytes)
             }
         }
+
+    private fun bfzBundle(report: ForensicReport, roomDbBytes: ByteArray?): ExportArtifact {
+        val zip = zipBundle(report, roomDbBytes)
+        val zipBytes = zip.bytes ?: ByteArray(0)
+        val gz = ByteArrayOutputStream()
+        GZIPOutputStream(gz).use { it.write(zipBytes) }
+        val bytes = gz.toByteArray()
+        return ExportArtifact(
+            format = ExportFormat.BFZ,
+            fileName = "battery_forensics_bundle.bfz",
+            mimeType = "application/gzip",
+            content = "Compressed diagnostic bundle (.bfz = gzip of ZIP, ${bytes.size} bytes)",
+            bytes = bytes,
+        )
+    }
 
     private fun zipBundle(report: ForensicReport, roomDbBytes: ByteArray?): ExportArtifact {
         val jsonContent = json.encodeToString(report)
@@ -174,7 +193,7 @@ class ExportGenerator(
                 "thermalStatus,wifiConnected,wifiRssiDbm,cellularRssiDbm,networkType," +
                 "chargingCurrentMicroamps,orientation,cellId,carrierName,cellularBand," +
                 "bluetoothOn,bluetoothConnected,locationEnabled,nfcEnabled,hotspotOn," +
-                "foregroundApp,memoryPressure,storageFreeBytes,storageFreePercent",
+                "foregroundApp,memoryPressure,storageFreeBytes,storageFreePercent,hdrActive",
         )
         report.samples.forEach { s ->
             appendLine(
@@ -209,6 +228,7 @@ class ExportGenerator(
                     s.memoryPressure,
                     s.storageFreeBytes,
                     s.storageFreePercent,
+                    s.hdrActive,
                 ).joinToString(","),
             )
         }

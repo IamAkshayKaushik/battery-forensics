@@ -249,6 +249,47 @@ class RuleEngineTest {
     }
 
     @Test
+    fun static120Hz_triggersAsInferredWithCaveat() {
+        // Stable brightness + sustained 120Hz while screen-on → Inferred static content drain
+        // (Android does not expose "static content" Measured; rule must label Inferred).
+        val samples = (1..8).map {
+            sample(screenOn = true, refreshRateHz = 120f, brightnessPercent = 45)
+        }
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("display_static_120hz_inferred")
+        val d = result.first { it.id == "display_static_120hz_inferred" }
+        assertThat(d.confidence.starsLabel).contains("Inferred")
+        assertThat(d.explanation).contains("does not expose")
+    }
+
+    @Test
+    fun hdrActive_triggersWhenSampled() {
+        val samples = (1..6).map {
+            sample(screenOn = true, brightnessPercent = 70, hdrActive = true)
+        }
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("display_hdr_active_drain")
+    }
+
+    @Test
+    fun motionDozeInterrupt_triggersFromPrivileged() {
+        val priv = PrivilegedEvidence(
+            doze = DozeTimelineSummary(
+                state = "ACTIVE",
+                deepEnabled = true,
+                lightEnabled = true,
+                historyHints = listOf("IDLE", "ACTIVE"),
+                motionTriggeredInterruptions = 3,
+                locationTriggeredInterruptions = 1,
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("doze_motion_location_interrupts")
+        assertThat(result.first { it.id == "doze_motion_location_interrupts" }.confidence.starsLabel)
+            .contains("Derived")
+    }
+
+    @Test
     fun baselineAnomaly_triggers() {
         val t0 = 1_000_000L
         val baseline = listOf(
@@ -293,6 +334,7 @@ class RuleEngineTest {
         bluetoothConnected: Boolean? = null,
         hotspotOn: Boolean? = null,
         storageFreePercent: Float? = null,
+        hdrActive: Boolean? = null,
     ) = MonitoringSample(
         timestampEpochMs = timestamp,
         batteryPercent = batteryPercent,
@@ -315,5 +357,6 @@ class RuleEngineTest {
         bluetoothConnected = bluetoothConnected,
         hotspotOn = hotspotOn,
         storageFreePercent = storageFreePercent,
+        hdrActive = hdrActive,
     )
 }

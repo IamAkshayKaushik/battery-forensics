@@ -30,6 +30,7 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(project(":ruleengine"))
+    implementation(project(":parser"))
     implementation(project(":statistics"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)

@@ -2,19 +2,25 @@ package com.batteryforensics.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import com.batteryforensics.analytics.NetworkForensics
 import com.batteryforensics.battery.ChemistryEngine
 import com.batteryforensics.diagnostics.DifferentialAnalyzer
 import com.batteryforensics.monitoring.MonitoringRepository
+import com.batteryforensics.shizuku.ShizukuDiagnosticsCollector
 import com.batteryforensics.thermal.ThermalAnalyzer
+import com.batteryforensics.timeline.PrivilegedTimelineInput
 import com.batteryforensics.timeline.TimelineBuilder
 import com.batteryforensics.timeline.TimelineEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class ChemistryUiState(
@@ -143,7 +149,9 @@ data class TimelineUiState(
 
 @HiltViewModel
 class TimelineViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val monitoringRepository: MonitoringRepository,
+    private val shizukuCollector: ShizukuDiagnosticsCollector,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TimelineUiState())
     val uiState: StateFlow<TimelineUiState> = _uiState.asStateFlow()
@@ -163,9 +171,31 @@ class TimelineViewModel @Inject constructor(
                 }
                 return@launch
             }
+            val privileged = withContext(Dispatchers.IO) {
+                runCatching {
+                    val snap = shizukuCollector.collect(context)
+                    val ev = snap.toPrivilegedEvidence()
+                    if (!ev.hasAnyData) null
+                    else PrivilegedTimelineInput(
+                        referenceEpochMs = end,
+                        dozeState = ev.doze?.state ?: ev.deviceIdle?.state,
+                        dozeHistoryHints = ev.doze?.historyHints.orEmpty(),
+                        motionInterruptions = ev.doze?.motionTriggeredInterruptions ?: 0,
+                        locationInterruptions = ev.doze?.locationTriggeredInterruptions ?: 0,
+                        alarmWakeups = ev.alarms?.wakeupAlarmCount,
+                        topAlarmPackages = ev.alarms?.topPackages.orEmpty().map { it.packageName },
+                        gmsWakeupHints = ev.alarms?.topPackages.orEmpty()
+                            .filter {
+                                it.packageName.contains("gms", ignoreCase = true) ||
+                                    it.packageName.contains("google", ignoreCase = true)
+                            }
+                            .map { it.packageName },
+                    )
+                }.getOrNull()
+            }
             _uiState.update {
                 TimelineUiState(
-                    events = TimelineBuilder.build(samples),
+                    events = TimelineBuilder.build(samples, privileged = privileged),
                     overnight = TimelineBuilder.overnightReplay(samples),
                     mode = "all",
                 )

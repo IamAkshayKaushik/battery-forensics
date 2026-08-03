@@ -1,0 +1,20 @@
+mEnabled=true
+mForceIdle=false
+mState=IDLE
+mLightEnabled=true
+mLightState=LIGHT_IDLE
+Idling history:
+  ts=1000 state=ACTIVE
+  ts=2000 state=INACTIVE reason=screen_off
+  ts=3000 state=IDLE_PENDING
+  ts=4000 state=SENSING
+  ts=5000 state=LOCATING
+  ts=6000 state=IDLE
+  ts=7000 state=IDLE_MAINTENANCE
+  ts=8000 state=ACTIVE reason=motion
+  ts=9000 state=IDLE
+  ts=10000 state=ACTIVE reason=location
+Whitelists:
+mMotionListener registered
+significant motion detected exit
+location update wake from idle

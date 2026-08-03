@@ -66,6 +66,7 @@ class SampleCollector @Inject constructor(
             memoryPressure = s.memoryPressure,
             storageFreeBytes = s.storageFreeBytes,
             storageFreePercent = s.storageFreePercent,
+            hdrActive = d.hdrActive,
         )
     }
 }

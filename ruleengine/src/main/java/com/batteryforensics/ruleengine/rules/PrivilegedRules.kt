@@ -156,26 +156,59 @@ class AlarmStormRule : ForensicRule {
                 title = title,
                 category = DiagnosticCategory.ALARM_MANAGER,
                 explanation =
-                    "AlarmManager dump shows ~$count wakeup alarms. " +
+                    "AlarmManager dump shows ~$count wakeup alarms" +
+                        (alarms.wakeupsPerHour?.let { " (~${"%.1f".format(it)}/h)" } ?: "") +
+                        (alarms.impactEstimate?.let { ". Impact: $it" } ?: "") +
+                        ". RTC_WAKEUP=${alarms.rtcWakeupCount ?: "?"} ELAPSED_WAKEUP=${alarms.elapsedRealtimeWakeupCount ?: "?"}. " +
                         "High wakeup rates prevent Doze and raise idle drain. Counts are Derived from dumpsys text.",
                 confidence = Confidence(score, ConfidenceLevel.DERIVED),
-                evidence = listOf(
-                    Evidence(
-                        id = "wakeup_count",
-                        description = "Wakeup alarm count from dumpsys alarm",
-                        metricKey = "alarm_wakeup_count",
-                        observedValue = count.toString(),
-                        threshold = "≥${TimeConstants.ALARM_WAKEUP_STORM_THRESHOLD}",
-                        confidenceLevel = ConfidenceLevel.DERIVED,
-                    ),
-                ),
-                supportingMetrics = top.map {
-                    SupportingMetric("pkg_${it.packageName}", it.packageName, it.count.toString(), "wakeups")
+                evidence = buildList {
+                    add(
+                        Evidence(
+                            id = "wakeup_count",
+                            description = "Wakeup alarm count from dumpsys alarm",
+                            metricKey = "alarm_wakeup_count",
+                            observedValue = count.toString(),
+                            threshold = "≥${TimeConstants.ALARM_WAKEUP_STORM_THRESHOLD}",
+                            confidenceLevel = ConfidenceLevel.DERIVED,
+                        ),
+                    )
+                    alarms.rtcWakeupCount?.let {
+                        add(
+                            Evidence(
+                                id = "rtc_wakeup",
+                                description = "RTC_WAKEUP alarms",
+                                metricKey = "alarm_rtc_wakeup",
+                                observedValue = it.toString(),
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                    alarms.elapsedRealtimeWakeupCount?.let {
+                        add(
+                            Evidence(
+                                id = "elapsed_wakeup",
+                                description = "ELAPSED_REALTIME_WAKEUP alarms",
+                                metricKey = "alarm_elapsed_wakeup",
+                                observedValue = it.toString(),
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                },
+                supportingMetrics = buildList {
+                    addAll(top.map {
+                        SupportingMetric("pkg_${it.packageName}", it.packageName, it.count.toString(), "wakeups")
+                    })
+                    alarms.wakeupsPerHour?.let {
+                        add(SupportingMetric("wakeups_per_hour", "Wakeups/hour", "%.2f".format(it)))
+                    }
                 },
                 counterEvidence = emptyList(),
                 recommendedActions = listOf(
                     "Inspect top wakeup packages and restrict background activity",
                     "Prefer inexact / non-wakeup alarms for non-critical work",
+                    "Prefer ELAPSED_REALTIME over RTC_WAKEUP when wall-clock is unnecessary",
                 ),
                 probabilityPercent = score,
             ),
@@ -201,8 +234,9 @@ class WakeLockAbuseRule : ForensicRule {
                 title = title,
                 category = DiagnosticCategory.WAKE_LOCKS,
                 explanation =
-                    "Power dump shows ~$total wake locks (app≈${app ?: "?"}, kernel≈${kernel ?: "?"}). " +
-                        "Held locks keep the CPU awake. App vs kernel split is best-effort Derived — OEM formats vary.",
+                    "Power dump shows ~$total wake locks (app≈${app ?: "?"}, kernel≈${kernel ?: "?"}" +
+                        ", modem≈${wl.modemLocks ?: "?"}, wifi≈${wl.wifiLocks ?: "?"}, sensors≈${wl.sensorLocks ?: "?"}, HAL≈${wl.powerHalLocks ?: "?"}). " +
+                        "Held locks keep the CPU awake. Taxonomy is best-effort Derived — OEM formats vary.",
                 confidence = Confidence(score, ConfidenceLevel.DERIVED),
                 evidence = buildList {
                     add(
@@ -226,6 +260,24 @@ class WakeLockAbuseRule : ForensicRule {
                             ),
                         )
                     }
+                    listOf(
+                        "modem" to wl.modemLocks,
+                        "wifi" to wl.wifiLocks,
+                        "sensors" to wl.sensorLocks,
+                        "power_hal" to wl.powerHalLocks,
+                    ).forEach { (name, n) ->
+                        if (n != null && n > 0) {
+                            add(
+                                Evidence(
+                                    id = "wl_$name",
+                                    description = "Wake lock taxonomy: $name",
+                                    metricKey = "wake_lock_$name",
+                                    observedValue = n.toString(),
+                                    confidenceLevel = ConfidenceLevel.INFERRED,
+                                ),
+                            )
+                        }
+                    }
                 },
                 supportingMetrics = wl.topTags.take(5).map {
                     SupportingMetric("tag_${it.packageName}", it.packageName, it.count.toString())
@@ -234,6 +286,7 @@ class WakeLockAbuseRule : ForensicRule {
                 recommendedActions = listOf(
                     "Force-stop or restrict top wake-lock tags' packages",
                     "Check media / location / sync holders overnight",
+                    "Separate modem/wifi/sensor holders from app PowerManager locks when tags allow",
                 ),
                 probabilityPercent = score,
             ),
@@ -248,10 +301,15 @@ class AppStandbyBypassRule : ForensicRule {
     override fun evaluate(context: RuleContext): RuleEvaluation? {
         val usage = context.privileged?.usageStats ?: return null
         val elevated = usage.elevatedBucketPackages
+        val bypass = usage.bypassPackageHints
         val hints = usage.standbyBucketHints.map { it.uppercase() }
         val hasActive = hints.any { it.contains("ACTIVE") || it.contains("WORKING_SET") }
-        if (elevated.isEmpty() && !hasActive) return null
-        val score = if (elevated.isNotEmpty()) 76 else 64
+        if (elevated.isEmpty() && bypass.isEmpty() && !hasActive) return null
+        val score = when {
+            bypass.isNotEmpty() -> 82
+            elevated.isNotEmpty() -> 76
+            else -> 64
+        }
         return RuleEvaluation(
             triggered = true,
             diagnosis = Diagnosis(
@@ -261,18 +319,34 @@ class AppStandbyBypassRule : ForensicRule {
                 explanation =
                     "UsageStats dump shows elevated standby buckets" +
                         (if (elevated.isNotEmpty()) " for ${elevated.take(5).joinToString()}" else "") +
-                        ". Apps stuck ACTIVE/WORKING_SET bypass standby savings — Derived from dumpsys.",
+                        (if (bypass.isNotEmpty()) "; bypass/exemption hints: ${bypass.take(5).joinToString()}" else "") +
+                        ". Apps stuck ACTIVE/WORKING_SET or exempted bypass standby savings — Derived from dumpsys.",
                 confidence = Confidence(score, ConfidenceLevel.DERIVED),
-                evidence = listOf(
-                    Evidence(
-                        id = "standby_buckets",
-                        description = "Elevated App Standby buckets",
-                        metricKey = "standby_bucket_hints",
-                        observedValue = (elevated.ifEmpty { hints }).take(8).joinToString(),
-                        confidenceLevel = ConfidenceLevel.DERIVED,
-                    ),
-                ),
-                supportingMetrics = emptyList(),
+                evidence = buildList {
+                    add(
+                        Evidence(
+                            id = "standby_buckets",
+                            description = "Elevated App Standby buckets",
+                            metricKey = "standby_bucket_hints",
+                            observedValue = (elevated.ifEmpty { hints }).take(8).joinToString(),
+                            confidenceLevel = ConfidenceLevel.DERIVED,
+                        ),
+                    )
+                    if (bypass.isNotEmpty()) {
+                        add(
+                            Evidence(
+                                id = "standby_bypass",
+                                description = "Standby bypass / exemption packages",
+                                metricKey = "standby_bypass_packages",
+                                observedValue = bypass.take(8).joinToString(),
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                },
+                supportingMetrics = usage.bucketCounts.entries.take(5).map {
+                    SupportingMetric("bucket_${it.key}", it.key, it.value.toString())
+                },
                 counterEvidence = emptyList(),
                 recommendedActions = listOf(
                     "Review unrestricted battery apps",
@@ -475,6 +549,66 @@ class JobSchedulerThrashRule : ForensicRule {
                 recommendedActions = listOf(
                     "Identify chatty sync adapters / WorkManager clients",
                     "Defer non-critical jobs to charging + unmetered",
+                ),
+                probabilityPercent = score,
+            ),
+        )
+    }
+}
+
+/** Motion / location triggered Doze exits from dumpsys reason tokens. */
+class DozeMotionLocationInterruptRule : ForensicRule {
+    override val id: String = "doze_motion_location_interrupts"
+    override val title: String = "Motion/location Doze interruptions"
+
+    override fun evaluate(context: RuleContext): RuleEvaluation? {
+        val doze = context.privileged?.doze ?: return null
+        val motion = doze.motionTriggeredInterruptions
+        val location = doze.locationTriggeredInterruptions
+        if (motion + location < 1) return null
+        val score = (70 + (motion + location) * 4).coerceIn(70, 92)
+        return RuleEvaluation(
+            triggered = true,
+            diagnosis = Diagnosis(
+                id = id,
+                title = title,
+                category = DiagnosticCategory.DOZE,
+                explanation =
+                    "DeviceIdle dump shows motion interrupts=$motion, location interrupts=$location. " +
+                        "These exits prevent sustained IDLE — Derived from dumpsys reason tokens (not IMU logs).",
+                confidence = Confidence(score, ConfidenceLevel.DERIVED),
+                evidence = buildList {
+                    if (motion > 0) {
+                        add(
+                            Evidence(
+                                id = "motion_interrupts",
+                                description = "Motion-triggered Doze exits",
+                                metricKey = "doze_motion_interrupts",
+                                observedValue = motion.toString(),
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                    if (location > 0) {
+                        add(
+                            Evidence(
+                                id = "location_interrupts",
+                                description = "Location-triggered Doze exits",
+                                metricKey = "doze_location_interrupts",
+                                observedValue = location.toString(),
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                },
+                supportingMetrics = listOf(
+                    SupportingMetric("doze_state", "Doze state", doze.state.orEmpty()),
+                ),
+                counterEvidence = emptyList(),
+                recommendedActions = listOf(
+                    "Disable Always-on Display / pick-up gestures overnight if OEM allows",
+                    "Restrict background location for non-essential apps",
+                    "Re-check dumpsys deviceidle after screen-off 30+ min stationary",
                 ),
                 probabilityPercent = score,
             ),

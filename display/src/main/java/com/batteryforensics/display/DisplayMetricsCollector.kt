@@ -12,6 +12,11 @@ data class DisplayReading(
     val brightnessPercent: Int?,
     val refreshRateHz: Float?,
     val kind: MetricKind = MetricKind.Measured,
+    /**
+     * HDR active when API ≥ 34 exposes [android.view.Display.isHdr].
+     * Otherwise null — never invent Measured HDR.
+     */
+    val hdrActive: Boolean? = null,
 )
 
 class DisplayMetricsCollector(
@@ -26,19 +31,26 @@ class DisplayMetricsCollector(
         }.getOrNull()
         val brightnessPercent = brightnessRaw?.let { ((it / 255f) * 100f).toInt().coerceIn(0, 100) }
 
-        val refreshRateHz = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            context.display?.refreshRate
+        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            context.display
         } else {
             @Suppress("DEPRECATION")
-            (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
-                .defaultDisplay
-                ?.refreshRate
+            (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
+        }
+
+        val refreshRateHz = display?.refreshRate
+
+        val hdrActive = if (Build.VERSION.SDK_INT >= 34) {
+            runCatching { display?.isHdr }.getOrNull()
+        } else {
+            null
         }
 
         return DisplayReading(
             screenOn = screenOn,
             brightnessPercent = brightnessPercent,
             refreshRateHz = refreshRateHz,
+            hdrActive = hdrActive,
         )
     }
 }

@@ -1,5 +1,9 @@
 package com.batteryforensics.app.ui.navigation
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BatteryChargingFull
@@ -11,12 +15,15 @@ import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,52 +63,77 @@ fun BatteryForensicsNavHost() {
     val currentRoute = backStack?.destination?.route
     val bottomDestinations = AppDestination.entries.filter { it.showInBottomBar }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                bottomDestinations.forEach { dest ->
-                    NavigationBarItem(
-                        selected = currentRoute == dest.route,
-                        onClick = {
-                            navController.navigate(dest.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(dest.icon, contentDescription = dest.label) },
-                        label = { Text(dest.label) },
-                    )
+    val navigateTo: (AppDestination) -> Unit = { dest ->
+        navController.navigate(dest.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val useRail = maxWidth >= 600.dp
+        Scaffold(
+            bottomBar = {
+                if (!useRail) {
+                    NavigationBar {
+                        bottomDestinations.forEach { dest ->
+                            NavigationBarItem(
+                                selected = currentRoute == dest.route,
+                                onClick = { navigateTo(dest) },
+                                icon = {
+                                    Icon(dest.icon, contentDescription = dest.label)
+                                },
+                                label = { Text(dest.label) },
+                            )
+                        }
+                    }
+                }
+            },
+        ) { padding ->
+            Row(modifier = Modifier.padding(padding).fillMaxSize()) {
+                if (useRail) {
+                    NavigationRail(modifier = Modifier.fillMaxHeight()) {
+                        bottomDestinations.forEach { dest ->
+                            NavigationRailItem(
+                                selected = currentRoute == dest.route,
+                                onClick = { navigateTo(dest) },
+                                icon = {
+                                    Icon(dest.icon, contentDescription = dest.label)
+                                },
+                                label = { Text(dest.label) },
+                            )
+                        }
+                    }
+                }
+                NavHost(
+                    navController = navController,
+                    startDestination = AppDestination.Home.route,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    composable(AppDestination.Home.route) {
+                        HomeScreen(
+                            onOpenChemistry = { navController.navigate(AppDestination.Chemistry.route) },
+                            onOpenThermal = { navController.navigate(AppDestination.Thermal.route) },
+                            onOpenNetwork = { navController.navigate(AppDestination.Network.route) },
+                            onOpenExport = { navController.navigate(AppDestination.Export.route) },
+                            onOpenDiagnostics = { navController.navigate(AppDestination.Diagnostics.route) },
+                            onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
+                            onOpenLive = { navController.navigate(AppDestination.LiveMonitor.route) },
+                        )
+                    }
+                    composable(AppDestination.LiveMonitor.route) { LiveMonitorScreen() }
+                    composable(AppDestination.Timeline.route) { TimelineScreen() }
+                    composable(AppDestination.Diagnostics.route) { DiagnosticsScreen() }
+                    composable(AppDestination.Settings.route) { SettingsScreen() }
+                    composable(AppDestination.Chemistry.route) { ChemistryScreen() }
+                    composable(AppDestination.Thermal.route) { ThermalScreen() }
+                    composable(AppDestination.Network.route) { NetworkScreen() }
+                    composable(AppDestination.Export.route) { ExportScreen() }
                 }
             }
-        },
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = AppDestination.Home.route,
-            modifier = Modifier.padding(padding),
-        ) {
-            composable(AppDestination.Home.route) {
-                HomeScreen(
-                    onOpenChemistry = { navController.navigate(AppDestination.Chemistry.route) },
-                    onOpenThermal = { navController.navigate(AppDestination.Thermal.route) },
-                    onOpenNetwork = { navController.navigate(AppDestination.Network.route) },
-                    onOpenExport = { navController.navigate(AppDestination.Export.route) },
-                    onOpenDiagnostics = { navController.navigate(AppDestination.Diagnostics.route) },
-                    onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
-                    onOpenLive = { navController.navigate(AppDestination.LiveMonitor.route) },
-                )
-            }
-            composable(AppDestination.LiveMonitor.route) { LiveMonitorScreen() }
-            composable(AppDestination.Timeline.route) { TimelineScreen() }
-            composable(AppDestination.Diagnostics.route) { DiagnosticsScreen() }
-            composable(AppDestination.Settings.route) { SettingsScreen() }
-            composable(AppDestination.Chemistry.route) { ChemistryScreen() }
-            composable(AppDestination.Thermal.route) { ThermalScreen() }
-            composable(AppDestination.Network.route) { NetworkScreen() }
-            composable(AppDestination.Export.route) { ExportScreen() }
         }
     }
 }
