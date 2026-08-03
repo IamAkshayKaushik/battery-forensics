@@ -1,7 +1,10 @@
 package com.batteryforensics.parser
 
+import com.batteryforensics.parser.activity.ActivityParser
 import com.batteryforensics.parser.alarm.AlarmParser
 import com.batteryforensics.parser.batterystats.BatteryStatsParser
+import com.batteryforensics.parser.cmd.CmdBatteryParser
+import com.batteryforensics.parser.cmd.CmdJobSchedulerParser
 import com.batteryforensics.parser.deviceidle.DeviceIdleParser
 import com.batteryforensics.parser.deviceidle.DozeParser
 import com.batteryforensics.parser.jobscheduler.JobSchedulerParser
@@ -71,6 +74,33 @@ class ParserFixtureTest {
         val raw = "standby_bucket=ACTIVE\nstandby bucket: RARE"
         val result = UsageStatsParser().parse(raw) as ParseResult.Success
         assertThat(result.value.standbyBucketHints).isNotEmpty()
+    }
+
+    @Test
+    fun activity_parsesFgsHints() {
+        val raw = """
+            ACTIVITY MANAGER
+            mResumedActivity=ActivityRecord{com.example/.Main}
+            isForeground=true com.example.tracker.SyncService
+        """.trimIndent()
+        val result = ActivityParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.topResumedActivity).contains("Main")
+    }
+
+    @Test
+    fun cmdBattery_parsesLevel() {
+        val raw = "Current battery status:\n  level: 77\n  temperature: 320\n  status: 2"
+        val result = CmdBatteryParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.level).isEqualTo(77)
+        assertThat(result.value.temperatureTenthsC).isEqualTo(320)
+    }
+
+    @Test
+    fun cmdJobs_parsesPending() {
+        val raw = "Pending jobs: 11\nRunning jobs: 2"
+        val result = CmdJobSchedulerParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.pendingJobCount).isEqualTo(11)
+        assertThat(result.value.runningJobCount).isEqualTo(2)
     }
 
     @Test

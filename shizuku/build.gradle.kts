@@ -30,6 +30,7 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(project(":parser"))
+    implementation(project(":ruleengine"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     api(libs.shizuku.api)

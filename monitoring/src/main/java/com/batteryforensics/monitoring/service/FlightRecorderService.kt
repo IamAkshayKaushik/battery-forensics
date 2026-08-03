@@ -12,24 +12,29 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.batteryforensics.core.time.TimeConstants
 import com.batteryforensics.monitoring.MonitoringRepositoryImpl
+import com.batteryforensics.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
  * Optional continuous sampler ("Flight Recorder").
- * Justified as a foreground service because WorkManager's minimum period (15 min)
- * is too coarse for forensic timeline reconstruction when the user explicitly enables it.
+ *
+ * WorkManager's minimum period is 15 minutes ([TimeConstants.WORKMANAGER_MIN_PERIOD_MS]) and cannot
+ * honor shorter Settings sample intervals. When the user enables Flight Recorder for fine sampling,
+ * this FGS uses [SettingsRepository] `sampleIntervalMs` (clamped to a safe floor).
  */
 @AndroidEntryPoint
 class FlightRecorderService : Service() {
     @Inject lateinit var repository: MonitoringRepositoryImpl
+    @Inject lateinit var settingsRepository: SettingsRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var loopJob: Job? = null
@@ -63,7 +68,17 @@ class FlightRecorderService : Service() {
         loopJob = scope.launch {
             while (isActive) {
                 runCatching { repository.captureAndPersist() }
-                delay(TimeConstants.FLIGHT_RECORDER_INTERVAL_MS)
+                val preferred = runCatching {
+                    settingsRepository.settings.first().sampleIntervalMs
+                }.getOrDefault(TimeConstants.FLIGHT_RECORDER_INTERVAL_MS)
+                // Prefer user Settings interval for fine sampling; never go below floor.
+                // If user set 1/5/15 min (WorkManager targets), Flight Recorder still samples
+                // at that cadence while FGS is on — WM alone cannot go below 15 min.
+                val interval = preferred.coerceIn(
+                    TimeConstants.FLIGHT_RECORDER_MIN_INTERVAL_MS,
+                    TimeConstants.WORKMANAGER_MIN_PERIOD_MS,
+                )
+                delay(interval)
             }
         }
     }
@@ -97,7 +112,7 @@ class FlightRecorderService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Flight Recorder active")
-            .setContentText("Sampling battery signals on-device. Nothing is uploaded.")
+            .setContentText("Sampling on-device using Settings interval. Nothing is uploaded.")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setOngoing(true)
             .addAction(0, "Stop", stopPending)

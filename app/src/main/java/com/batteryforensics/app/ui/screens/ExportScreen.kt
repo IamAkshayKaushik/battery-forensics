@@ -11,6 +11,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -21,19 +22,35 @@ import com.batteryforensics.app.ui.viewmodel.ExportViewModel
 @Composable
 fun ExportScreen(viewModel: ExportViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     ForensicScreen(
         title = "Export",
-        subtitle = "Reproducible local reports. Share only what you choose.",
+        subtitle = "Save to app storage and share via system chooser. Nothing uploaded.",
     ) {
-        TextButton(onClick = viewModel::generate) { Text("Generate full export set") }
+        TextButton(onClick = viewModel::generate) { Text("Generate, save & prepare share") }
         Spacer(Modifier.height(12.dp))
         if (state.markdownPreview.isBlank()) {
             EmptyInvestigationHint(
-                "Exports: JSON, CSV, HTML, Markdown AI report, ZIP bundle, SQLite SQL snapshot. All local.",
+                "Exports: JSON, CSV, HTML, Markdown AI report, ZIP (incl. Room DB when present), SQL text snapshot. Saved under app-specific files/exports/.",
             )
         } else {
             Text("Formats generated", style = MaterialTheme.typography.titleMedium)
             Text(state.formatsSummary, style = MaterialTheme.typography.bodyMedium)
+            state.savedPath?.let {
+                Spacer(Modifier.height(8.dp))
+                Text("Saved to", style = MaterialTheme.typography.titleMedium)
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
+            if (state.shareReady) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        viewModel.shareIntentOrNull()?.let { context.startActivity(it) }
+                    },
+                ) {
+                    Text("Share via FileProvider…")
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text("Markdown preview", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))

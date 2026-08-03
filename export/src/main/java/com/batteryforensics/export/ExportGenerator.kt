@@ -33,7 +33,11 @@ class ExportGenerator(
     },
     private val aiReportGenerator: AiReportGenerator = AiReportGenerator(),
 ) {
-    fun export(report: ForensicReport, formats: Set<ExportFormat>): List<ExportArtifact> =
+    fun export(
+        report: ForensicReport,
+        formats: Set<ExportFormat>,
+        roomDbBytes: ByteArray? = null,
+    ): List<ExportArtifact> =
         formats.map { format ->
             when (format) {
                 ExportFormat.JSON -> ExportArtifact(
@@ -60,16 +64,17 @@ class ExportGenerator(
                     mimeType = "text/html",
                     content = htmlReport(report),
                 )
-                ExportFormat.ZIP -> zipBundle(report)
+                ExportFormat.ZIP -> zipBundle(report, roomDbBytes)
                 ExportFormat.SQLITE_SNAPSHOT -> sqliteSnapshot(report)
             }
         }
 
-    private fun zipBundle(report: ForensicReport): ExportArtifact {
+    private fun zipBundle(report: ForensicReport, roomDbBytes: ByteArray?): ExportArtifact {
         val jsonContent = json.encodeToString(report)
         val md = aiReportGenerator.toMarkdown(report)
         val csv = samplesCsv(report)
         val html = htmlReport(report)
+        val sql = sqliteSnapshot(report).content
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zip ->
             fun put(name: String, text: String) {
@@ -77,35 +82,56 @@ class ExportGenerator(
                 zip.write(text.toByteArray(Charsets.UTF_8))
                 zip.closeEntry()
             }
+            fun putBytes(name: String, bytes: ByteArray) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
             put("battery_forensics_report.json", jsonContent)
             put("battery_forensics_ai_report.md", md)
             put("battery_forensics_samples.csv", csv)
             put("battery_forensics_report.html", html)
-            put("README.txt", "Battery Forensics diagnostic bundle. All data generated on-device. Privacy-first — no cloud upload.\n")
+            put("battery_forensics_snapshot.sql", sql)
+            put(
+                "README.txt",
+                "Battery Forensics diagnostic bundle.\n" +
+                    "- .sql is portable SQL TEXT (not a binary SQLite file).\n" +
+                    "- battery_forensics.db (if present) is a binary Room DB copy.\n" +
+                    "All data generated on-device. Privacy-first — no cloud upload.\n",
+            )
+            if (roomDbBytes != null) {
+                putBytes("battery_forensics.db", roomDbBytes)
+            }
         }
         val bytes = baos.toByteArray()
         return ExportArtifact(
             format = ExportFormat.ZIP,
             fileName = "battery_forensics_bundle.zip",
             mimeType = "application/zip",
-            content = "ZIP bundle (${bytes.size} bytes) containing JSON, Markdown, CSV, HTML",
+            content = "ZIP bundle (${bytes.size} bytes) containing JSON, Markdown, CSV, HTML, SQL" +
+                if (roomDbBytes != null) ", Room DB" else "",
             bytes = bytes,
         )
     }
 
     /**
-     * Portable SQLite-ish snapshot as SQL text the user can import.
-     * Avoids shipping a binary Room file from the export module.
+     * Portable SQL text snapshot the user can import.
+     * Labeled honestly — this is NOT a binary SQLite file. Prefer also shipping Room DB in ZIP.
      */
     private fun sqliteSnapshot(report: ForensicReport): ExportArtifact {
         val sql = buildString {
-            appendLine("-- Battery Forensics SQLite snapshot (local export)")
+            appendLine("-- Battery Forensics SQL TEXT snapshot (not a binary .db file)")
             appendLine("CREATE TABLE IF NOT EXISTS monitoring_samples (")
             appendLine("  timestampEpochMs INTEGER, batteryPercent INTEGER, voltageMv INTEGER,")
             appendLine("  currentMicroamps INTEGER, chargeCounterMah INTEGER, temperatureC REAL,")
             appendLine("  isCharging INTEGER, screenOn INTEGER, brightnessPercent INTEGER,")
             appendLine("  refreshRateHz REAL, thermalStatus INTEGER, wifiConnected INTEGER,")
-            appendLine("  wifiRssiDbm INTEGER, cellularRssiDbm INTEGER, networkType TEXT")
+            appendLine("  wifiRssiDbm INTEGER, cellularRssiDbm INTEGER, networkType TEXT,")
+            appendLine("  chargingCurrentMicroamps INTEGER, orientation TEXT, cellId TEXT,")
+            appendLine("  carrierName TEXT, cellularBand TEXT, bluetoothOn INTEGER,")
+            appendLine("  bluetoothConnected INTEGER, locationEnabled INTEGER, nfcEnabled INTEGER,")
+            appendLine("  hotspotOn INTEGER, foregroundApp TEXT, memoryPressure TEXT,")
+            appendLine("  storageFreeBytes INTEGER, storageFreePercent REAL")
             appendLine(");")
             appendLine("CREATE TABLE IF NOT EXISTS diagnoses (")
             appendLine("  id TEXT, title TEXT, category TEXT, probability INTEGER, confidence TEXT, explanation TEXT")
@@ -117,7 +143,12 @@ class ExportGenerator(
                         "${s.currentMicroamps.sqlInt},${s.chargeCounterMah.sqlInt},${s.temperatureC.sqlReal}," +
                         "${s.isCharging.sqlBool},${s.screenOn.sqlBool},${s.brightnessPercent.sqlInt}," +
                         "${s.refreshRateHz.sqlReal},${s.thermalStatus.sqlInt},${s.wifiConnected.sqlBool}," +
-                        "${s.wifiRssiDbm.sqlInt},${s.cellularRssiDbm.sqlInt},${s.networkType.sqlText});",
+                        "${s.wifiRssiDbm.sqlInt},${s.cellularRssiDbm.sqlInt},${s.networkType.sqlText}," +
+                        "${s.chargingCurrentMicroamps.sqlInt},${s.orientation.sqlText},${s.cellId.sqlText}," +
+                        "${s.carrierName.sqlText},${s.cellularBand.sqlText},${s.bluetoothOn.sqlBool}," +
+                        "${s.bluetoothConnected.sqlBool},${s.locationEnabled.sqlBool},${s.nfcEnabled.sqlBool}," +
+                        "${s.hotspotOn.sqlBool},${s.foregroundApp.sqlText},${s.memoryPressure.sqlText}," +
+                        "${s.storageFreeBytes.sqlLong},${s.storageFreePercent.sqlReal});",
                 )
             }
             report.diagnoses.forEach { d ->
@@ -140,7 +171,10 @@ class ExportGenerator(
         appendLine(
             "timestampEpochMs,batteryPercent,voltageMv,currentMicroamps,chargeCounterMah," +
                 "temperatureC,isCharging,chargePlug,screenOn,brightnessPercent,refreshRateHz," +
-                "thermalStatus,wifiConnected,wifiRssiDbm,cellularRssiDbm,networkType",
+                "thermalStatus,wifiConnected,wifiRssiDbm,cellularRssiDbm,networkType," +
+                "chargingCurrentMicroamps,orientation,cellId,carrierName,cellularBand," +
+                "bluetoothOn,bluetoothConnected,locationEnabled,nfcEnabled,hotspotOn," +
+                "foregroundApp,memoryPressure,storageFreeBytes,storageFreePercent",
         )
         report.samples.forEach { s ->
             appendLine(
@@ -161,6 +195,20 @@ class ExportGenerator(
                     s.wifiRssiDbm,
                     s.cellularRssiDbm,
                     s.networkType,
+                    s.chargingCurrentMicroamps,
+                    s.orientation,
+                    s.cellId,
+                    s.carrierName,
+                    s.cellularBand,
+                    s.bluetoothOn,
+                    s.bluetoothConnected,
+                    s.locationEnabled,
+                    s.nfcEnabled,
+                    s.hotspotOn,
+                    s.foregroundApp,
+                    s.memoryPressure,
+                    s.storageFreeBytes,
+                    s.storageFreePercent,
                 ).joinToString(","),
             )
         }
@@ -209,6 +257,7 @@ class ExportGenerator(
     }
 
     private val Int?.sqlInt: String get() = this?.toString() ?: "NULL"
+    private val Long?.sqlLong: String get() = this?.toString() ?: "NULL"
     private val Float?.sqlReal: String get() = this?.toString() ?: "NULL"
     private val Boolean?.sqlBool: String get() = when (this) {
         true -> "1"

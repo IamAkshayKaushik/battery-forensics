@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import com.batteryforensics.parser.ActivitySummary
 import com.batteryforensics.parser.AlarmSummary
 import com.batteryforensics.parser.BatteryStatsSummary
+import com.batteryforensics.parser.CmdBatterySummary
 import com.batteryforensics.parser.DeviceIdleSummary
 import com.batteryforensics.parser.DozeTimelineSummary
 import com.batteryforensics.parser.JobSchedulerSummary
@@ -14,8 +16,11 @@ import com.batteryforensics.parser.PowerSummary
 import com.batteryforensics.parser.ThermalServiceSummary
 import com.batteryforensics.parser.UsageStatsSummary
 import com.batteryforensics.parser.WakeLockSummary
+import com.batteryforensics.parser.activity.ActivityParser
 import com.batteryforensics.parser.alarm.AlarmParser
 import com.batteryforensics.parser.batterystats.BatteryStatsParser
+import com.batteryforensics.parser.cmd.CmdBatteryParser
+import com.batteryforensics.parser.cmd.CmdJobSchedulerParser
 import com.batteryforensics.parser.deviceidle.DeviceIdleParser
 import com.batteryforensics.parser.deviceidle.DozeParser
 import com.batteryforensics.parser.jobscheduler.JobSchedulerParser
@@ -23,6 +28,7 @@ import com.batteryforensics.parser.power.PowerParser
 import com.batteryforensics.parser.power.WakeLockParser
 import com.batteryforensics.parser.thermalservice.ThermalServiceParser
 import com.batteryforensics.parser.usagestats.UsageStatsParser
+import com.batteryforensics.ruleengine.PrivilegedEvidence
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -240,12 +246,30 @@ class ShizukuDiagnosticsCollector(
         val jobs: JobSchedulerSummary? = null,
         val usageStats: UsageStatsSummary? = null,
         val thermalService: ThermalServiceSummary? = null,
+        val activity: ActivitySummary? = null,
+        val cmdBattery: CmdBatterySummary? = null,
         val errors: List<String> = emptyList(),
     ) {
         val hasAnyData: Boolean
             get() = batteryStats != null || power != null || wakeLocks != null ||
                 deviceIdle != null || doze != null || alarms != null ||
-                jobs != null || usageStats != null || thermalService != null
+                jobs != null || usageStats != null || thermalService != null ||
+                activity != null || cmdBattery != null
+
+        fun toPrivilegedEvidence(): PrivilegedEvidence = PrivilegedEvidence(
+            batteryStats = batteryStats,
+            power = power,
+            wakeLocks = wakeLocks,
+            deviceIdle = deviceIdle,
+            doze = doze,
+            alarms = alarms,
+            jobs = jobs,
+            usageStats = usageStats,
+            thermalService = thermalService,
+            activity = activity,
+            cmdBattery = cmdBattery,
+            collectionErrors = errors,
+        )
     }
 
     fun collect(context: Context): PrivilegedSnapshot {
@@ -263,6 +287,9 @@ class ShizukuDiagnosticsCollector(
         fun dump(service: String): String? = gateway.runShellCommand("dumpsys $service").also {
             if (it == null) errors += "Failed to dump $service"
         }
+        fun cmd(command: String): String? = gateway.runShellCommand(command).also {
+            if (it == null) errors += "Failed: $command"
+        }
 
         fun <T> parse(raw: String?, parser: (String) -> ParseResult<T>): T? {
             if (raw == null) return null
@@ -277,6 +304,14 @@ class ShizukuDiagnosticsCollector(
 
         val powerRaw = dump("power")
         val idleRaw = dump("deviceidle")
+        val jobsRaw = dump("jobscheduler")
+        val jobsFromDumpsys = parse(jobsRaw) { JobSchedulerParser().parse(it) }
+        val jobsFromCmd = if (jobsFromDumpsys?.pendingJobCount == null) {
+            parse(cmd("cmd jobscheduler get-job-state")) { CmdJobSchedulerParser().parse(it) }
+                ?: parse(cmd("cmd jobscheduler")) { CmdJobSchedulerParser().parse(it) }
+        } else {
+            null
+        }
         return PrivilegedSnapshot(
             availability = avail,
             batteryStats = parse(dump("batterystats")) { BatteryStatsParser().parse(it) },
@@ -285,9 +320,11 @@ class ShizukuDiagnosticsCollector(
             deviceIdle = parse(idleRaw) { DeviceIdleParser().parse(it) },
             doze = parse(idleRaw) { DozeParser().parse(it) },
             alarms = parse(dump("alarm")) { AlarmParser().parse(it) },
-            jobs = parse(dump("jobscheduler")) { JobSchedulerParser().parse(it) },
+            jobs = jobsFromDumpsys ?: jobsFromCmd,
             usageStats = parse(dump("usagestats")) { UsageStatsParser().parse(it) },
             thermalService = parse(dump("thermalservice")) { ThermalServiceParser().parse(it) },
+            activity = parse(dump("activity")) { ActivityParser().parse(it) },
+            cmdBattery = parse(cmd("cmd battery get status") ?: cmd("cmd battery")) { CmdBatteryParser().parse(it) },
             errors = errors,
         )
     }

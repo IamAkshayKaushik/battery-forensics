@@ -54,12 +54,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         MetricRow(
             "Sample interval",
             when (state.settings.sampleIntervalMs) {
-                TimeConstants.DEFAULT_SAMPLE_INTERVAL_MS -> "1 min (default target)"
+                TimeConstants.FLIGHT_RECORDER_INTERVAL_MS -> "15s (Flight Recorder fine)"
+                TimeConstants.DEFAULT_SAMPLE_INTERVAL_MS -> "1 min"
                 5 * TimeConstants.MILLIS_PER_MINUTE -> "5 min"
-                15 * TimeConstants.MILLIS_PER_MINUTE -> "15 min"
+                15 * TimeConstants.MILLIS_PER_MINUTE -> "15 min (WorkManager floor)"
                 else -> "${state.settings.sampleIntervalMs / 1000}s"
             },
-            "WorkManager minimum period is 15 min; Flight Recorder uses 15s",
+            "WorkManager cannot period <15 min. Flight Recorder FGS honors this Settings interval for fine sampling.",
         )
         TextButton(onClick = viewModel::cycleSampleInterval) {
             Text("Cycle interval preference")
@@ -68,7 +69,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         Spacer(Modifier.height(12.dp))
         Text("Flight Recorder (foreground)", style = MaterialTheme.typography.titleMedium)
         Text(
-            "15s continuous sampling while enabled. Uses a foreground service intentionally — WorkManager alone is too coarse for forensic timelines.",
+            "Continuous sampling while enabled. Uses Settings sample interval (WorkManager alone is capped at 15 min and cannot honor shorter periods).",
             style = MaterialTheme.typography.bodyMedium,
         )
         Switch(

@@ -22,6 +22,20 @@ data class MonitoringSampleEntity(
     val wifiRssiDbm: Int?,
     val cellularRssiDbm: Int?,
     val networkType: String?,
+    val chargingCurrentMicroamps: Int? = null,
+    val orientation: String? = null,
+    val cellId: String? = null,
+    val carrierName: String? = null,
+    val cellularBand: String? = null,
+    val bluetoothOn: Boolean? = null,
+    val bluetoothConnected: Boolean? = null,
+    val locationEnabled: Boolean? = null,
+    val nfcEnabled: Boolean? = null,
+    val hotspotOn: Boolean? = null,
+    val foregroundApp: String? = null,
+    val memoryPressure: String? = null,
+    val storageFreeBytes: Long? = null,
+    val storageFreePercent: Float? = null,
 )
 
 @Entity(tableName = "timeline_events")

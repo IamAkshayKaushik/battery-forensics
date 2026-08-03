@@ -8,23 +8,58 @@ interface ForensicRule {
     val title: String
     fun evaluate(context: RuleContext): RuleEvaluation?
 }
+
+data class RuleContext(
+    val samples: List<MonitoringSample>,
+    val nowEpochMs: Long = …,
+    val privileged: PrivilegedEvidence? = null, // typed dumpsys summaries
+    val baselineSamples: List<MonitoringSample> = emptyList(),
+)
 ```
 
 Each triggered evaluation must produce a `Diagnosis` with evidence, confidence level, counter-evidence, and actions.
 
-## Bundled rules
+Privileged dumpsys never claims Measured for RRC/modem state machines — use Derived/Inferred.
 
-1. **Weak cellular signal** — RSSI ≤ -110 dBm majority (Measured)
-2. **Excessive screen brightness / high refresh** — screen-on window (Measured)
-3. **Elevated temperature / rapid heating** — peak ≥ 40°C or Δ ≥ 5°C
-4. **Charging heat** — ≥ 42°C while charging
-5. **High overnight standby drain** — ≥ 3%/h over ≥ 4h mostly screen-off (Derived)
-6. **Modem-induced heating** — hot + weak signal while screen-off (Inferred)
-7. **Weak Wi-Fi drain** — connected Wi-Fi ≤ -80 dBm majority
-8. **Battery aging / voltage sag** — rest vs load gap ≥ 150 mV (Derived)
-9. **Sustained high discharge current** — avg ≥ 500 mA
-10. **Frequent network transitions** — ≥ 2 type changes/h (Derived)
-11. **Thermal throttling** — PowerManager status ≥ MODERATE or very high temp
+## Bundled rules (`DefaultRules.all()`)
+
+### Sample-based
+
+1. weak_cellular_signal
+2. excessive_screen_brightness
+3. elevated_temperature
+4. charging_heat
+5. overnight_standby_drain
+6. modem_induced_heating (Inferred)
+7. weak_wifi_drain
+8. battery_aging_voltage_sag
+9. high_discharge_current
+10. frequent_network_transitions
+11. thermal_throttling
+12. location_enabled_drain
+13. bluetooth_left_on_drain
+14. hotspot_on_drain
+15. display_120hz_screen_on
+16. thermal_runaway_ish
+17. charging_inefficiency_heat
+18. baseline_anomaly_regression (Inferred; needs baselineSamples)
+19. nfc_left_on_drain (Speculative)
+20. low_storage_pressure
+
+### Privileged (Shizuku dumpsys → RuleContext.privileged)
+
+21. doze_failure_to_enter
+22. frequent_doze_exits
+23. alarm_storm
+24. wake_lock_abuse
+25. app_standby_bypass
+26. fgs_abuse
+27. gms_wakeup_pattern (Inferred)
+28. jobscheduler_thrash
+
+### Skipped (no signal)
+
+- Continuous IMU / sensor HAL drain — not sampled; unknown-factor note only.
 
 ## Ranking
 

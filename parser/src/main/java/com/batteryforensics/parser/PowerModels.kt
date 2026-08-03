@@ -13,11 +13,29 @@ data class PackageCount(
 
 data class JobSchedulerSummary(
     val pendingJobCount: Int?,
+    val runningJobCount: Int? = null,
     val notes: List<String> = emptyList(),
 )
 
 data class UsageStatsSummary(
     val standbyBucketHints: List<String>,
+    /** Packages hinted as ACTIVE / WORKING_SET while screen-off drain is high. */
+    val elevatedBucketPackages: List<String> = emptyList(),
+    val notes: List<String> = emptyList(),
+)
+
+/** Best-effort `dumpsys activity` stub summary. */
+data class ActivitySummary(
+    val foregroundServiceHints: List<String> = emptyList(),
+    val topResumedActivity: String? = null,
+    val notes: List<String> = emptyList(),
+)
+
+/** Best-effort `cmd battery` stub summary. */
+data class CmdBatterySummary(
+    val statusLine: String? = null,
+    val level: Int? = null,
+    val temperatureTenthsC: Int? = null,
     val notes: List<String> = emptyList(),
 )
 

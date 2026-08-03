@@ -132,9 +132,10 @@ class SettingsViewModel @Inject constructor(
     fun cycleSampleInterval() {
         val current = uiState.value.settings.sampleIntervalMs
         val next = when (current) {
+            TimeConstants.FLIGHT_RECORDER_INTERVAL_MS -> TimeConstants.DEFAULT_SAMPLE_INTERVAL_MS
             TimeConstants.DEFAULT_SAMPLE_INTERVAL_MS -> 5 * TimeConstants.MILLIS_PER_MINUTE
             5 * TimeConstants.MILLIS_PER_MINUTE -> 15 * TimeConstants.MILLIS_PER_MINUTE
-            else -> TimeConstants.DEFAULT_SAMPLE_INTERVAL_MS
+            else -> TimeConstants.FLIGHT_RECORDER_INTERVAL_MS
         }
         setSampleIntervalMs(next)
     }

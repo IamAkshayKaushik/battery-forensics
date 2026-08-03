@@ -1,12 +1,24 @@
 package com.batteryforensics.ruleengine
 
 import com.batteryforensics.core.model.MonitoringSample
+import com.batteryforensics.parser.AlarmSummary
+import com.batteryforensics.parser.DeviceIdleSummary
+import com.batteryforensics.parser.DozeTimelineSummary
+import com.batteryforensics.parser.JobSchedulerSummary
+import com.batteryforensics.parser.PackageCount
+import com.batteryforensics.parser.UsageStatsSummary
+import com.batteryforensics.parser.WakeLockSummary
 import com.batteryforensics.ruleengine.rules.DefaultRules
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 class RuleEngineTest {
     private val engine = RuleEngine(DefaultRules.all())
+
+    @Test
+    fun defaultRules_countIsExpanded() {
+        assertThat(DefaultRules.all().size).isAtLeast(25)
+    }
 
     @Test
     fun weakCellularSignal_triggers_whenMajorityBelowThreshold() {
@@ -112,6 +124,158 @@ class RuleEngineTest {
         assertThat(result.map { it.id }).contains("battery_aging_voltage_sag")
     }
 
+    @Test
+    fun locationEnabled_triggers() {
+        val samples = (1..8).map {
+            sample(locationEnabled = true, screenOn = false, currentUa = -250_000)
+        }
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("location_enabled_drain")
+    }
+
+    @Test
+    fun bluetoothLeftOn_triggers() {
+        val samples = (1..8).map {
+            sample(bluetoothOn = true, bluetoothConnected = true)
+        }
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("bluetooth_left_on_drain")
+    }
+
+    @Test
+    fun hotspotOn_triggers() {
+        val samples = (1..6).map { sample(hotspotOn = true) }
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("hotspot_on_drain")
+    }
+
+    @Test
+    fun display120Hz_triggers() {
+        val samples = (1..6).map {
+            sample(screenOn = true, refreshRateHz = 120f)
+        }
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("display_120hz_screen_on")
+    }
+
+    @Test
+    fun thermalRunawayIsh_triggers() {
+        val t0 = 1_000_000L
+        val samples = listOf(
+            sample(timestamp = t0, temperatureC = 35f),
+            sample(timestamp = t0 + 60_000, temperatureC = 42f),
+            sample(timestamp = t0 + 120_000, temperatureC = 50f),
+        )
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("thermal_runaway_ish")
+    }
+
+    @Test
+    fun dozeFailure_triggersFromPrivileged() {
+        val priv = PrivilegedEvidence(
+            deviceIdle = DeviceIdleSummary(deepEnabled = false, lightEnabled = true, state = "ACTIVE"),
+            doze = DozeTimelineSummary(
+                state = "ACTIVE",
+                deepEnabled = false,
+                lightEnabled = true,
+                historyHints = listOf("ACTIVE", "INACTIVE"),
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("doze_failure_to_enter")
+        assertThat(result.first { it.id == "doze_failure_to_enter" }.confidence.starsLabel)
+            .contains("Derived")
+    }
+
+    @Test
+    fun alarmStorm_triggersFromPrivileged() {
+        val priv = PrivilegedEvidence(
+            alarms = AlarmSummary(
+                wakeupAlarmCount = 80,
+                topPackages = listOf(PackageCount("com.example.chatty", 40)),
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("alarm_storm")
+    }
+
+    @Test
+    fun wakeLockAbuse_triggersFromPrivileged() {
+        val priv = PrivilegedEvidence(
+            wakeLocks = WakeLockSummary(
+                totalLocks = 12,
+                appLocks = 9,
+                kernelLocks = 3,
+                topTags = listOf(PackageCount("*alarm*", 4)),
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("wake_lock_abuse")
+    }
+
+    @Test
+    fun gmsWakeup_isInferred() {
+        val priv = PrivilegedEvidence(
+            alarms = AlarmSummary(
+                wakeupAlarmCount = 20,
+                topPackages = listOf(PackageCount("com.google.android.gms", 15)),
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("gms_wakeup_pattern")
+        assertThat(result.first { it.id == "gms_wakeup_pattern" }.confidence.starsLabel)
+            .contains("Inferred")
+    }
+
+    @Test
+    fun jobThrash_triggers() {
+        val priv = PrivilegedEvidence(
+            jobs = JobSchedulerSummary(pendingJobCount = 40, runningJobCount = 5),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("jobscheduler_thrash")
+    }
+
+    @Test
+    fun appStandbyBypass_triggers() {
+        val priv = PrivilegedEvidence(
+            usageStats = UsageStatsSummary(
+                standbyBucketHints = listOf("ACTIVE", "RARE"),
+                elevatedBucketPackages = listOf("com.example.keeplive"),
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("app_standby_bypass")
+    }
+
+    @Test
+    fun baselineAnomaly_triggers() {
+        val t0 = 1_000_000L
+        val baseline = listOf(
+            sample(timestamp = t0, batteryPercent = 90, screenOn = false),
+            sample(timestamp = t0 + 3_600_000, batteryPercent = 88, screenOn = false),
+            sample(timestamp = t0 + 2 * 3_600_000, batteryPercent = 86, screenOn = false),
+            sample(timestamp = t0 + 3 * 3_600_000, batteryPercent = 84, screenOn = false),
+        )
+        val current = listOf(
+            sample(timestamp = t0 + 10 * 3_600_000, batteryPercent = 90, screenOn = false),
+            sample(timestamp = t0 + 11 * 3_600_000, batteryPercent = 80, screenOn = false),
+            sample(timestamp = t0 + 12 * 3_600_000, batteryPercent = 70, screenOn = false),
+            sample(timestamp = t0 + 13 * 3_600_000, batteryPercent = 60, screenOn = false),
+        )
+        val result = engine.evaluate(RuleContext(samples = current, baselineSamples = baseline))
+        assertThat(result.map { it.id }).contains("baseline_anomaly_regression")
+        assertThat(result.first { it.id == "baseline_anomaly_regression" }.confidence.starsLabel)
+            .contains("Inferred")
+    }
+
+    @Test
+    fun lowStorage_triggers() {
+        val samples = (1..4).map { sample(storageFreePercent = 5f) }
+        val result = engine.evaluate(RuleContext(samples))
+        assertThat(result.map { it.id }).contains("low_storage_pressure")
+    }
+
     private fun sample(
         timestamp: Long = System.currentTimeMillis(),
         batteryPercent: Int? = 80,
@@ -124,6 +288,11 @@ class RuleEngineTest {
         wifiConnected: Boolean? = false,
         currentUa: Int? = -300_000,
         voltageMv: Int? = 4000,
+        locationEnabled: Boolean? = null,
+        bluetoothOn: Boolean? = null,
+        bluetoothConnected: Boolean? = null,
+        hotspotOn: Boolean? = null,
+        storageFreePercent: Float? = null,
     ) = MonitoringSample(
         timestampEpochMs = timestamp,
         batteryPercent = batteryPercent,
@@ -141,5 +310,10 @@ class RuleEngineTest {
         wifiRssiDbm = null,
         cellularRssiDbm = cellularRssiDbm,
         networkType = "lte",
+        locationEnabled = locationEnabled,
+        bluetoothOn = bluetoothOn,
+        bluetoothConnected = bluetoothConnected,
+        hotspotOn = hotspotOn,
+        storageFreePercent = storageFreePercent,
     )
 }

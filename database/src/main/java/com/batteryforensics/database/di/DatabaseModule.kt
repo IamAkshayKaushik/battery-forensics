@@ -22,7 +22,11 @@ object DatabaseModule {
             context,
             BatteryForensicsDatabase::class.java,
             "battery_forensics.db",
-        ).build()
+        )
+            // v1→v2 adds monitoring columns. Destructive fallback is OK for debug builds;
+            // see docs/MONITORING.md. Production should ship a typed Migration when schema stabilizes.
+            .fallbackToDestructiveMigration()
+            .build()
 
     @Provides
     fun provideMonitoringSampleDao(db: BatteryForensicsDatabase): MonitoringSampleDao =

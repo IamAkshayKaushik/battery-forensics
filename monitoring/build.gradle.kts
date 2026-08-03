@@ -38,6 +38,7 @@ dependencies {
     implementation(project(":telephony"))
     implementation(project(":wifi"))
     implementation(project(":permissions"))
+    implementation(project(":settings"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.hilt.android)

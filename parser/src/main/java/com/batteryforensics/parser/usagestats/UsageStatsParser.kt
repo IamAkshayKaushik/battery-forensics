@@ -15,9 +15,18 @@ class UsageStatsParser : DumpsysParser<UsageStatsSummary> {
             .distinct()
             .take(20)
             .toList()
+        val elevatedPkgs = Regex(
+            """([\w.]+)\s+.*standby[_ ]?bucket[=: ]+(ACTIVE|WORKING_SET|FREQUENT)""",
+            RegexOption.IGNORE_CASE,
+        ).findAll(rawDump)
+            .mapNotNull { it.groupValues.getOrNull(1)?.takeIf { p -> p.contains('.') } }
+            .distinct()
+            .take(10)
+            .toList()
         return ParseResult.Success(
             UsageStatsSummary(
                 standbyBucketHints = buckets,
+                elevatedBucketPackages = elevatedPkgs,
                 notes = buildList {
                     if (buckets.isEmpty()) add("No standby bucket tokens found — OEM dump format may differ")
                     add("App Standby buckets require dumpsys usagestats (Shizuku) for full fidelity")

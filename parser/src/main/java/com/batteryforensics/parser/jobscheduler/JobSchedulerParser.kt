@@ -15,10 +15,13 @@ class JobSchedulerParser : DumpsysParser<JobSchedulerSummary> {
                 .find(rawDump)?.groupValues?.get(1)?.toIntOrNull()
             ?: rawDump.lineSequence().count { it.contains("JobStatus{", ignoreCase = false) }
                 .takeIf { it > 0 }
+        val running = Regex("""Running(?: jobs)?:?\s*(\d+)""", RegexOption.IGNORE_CASE)
+            .find(rawDump)?.groupValues?.get(1)?.toIntOrNull()
 
         return ParseResult.Success(
             JobSchedulerSummary(
                 pendingJobCount = pending,
+                runningJobCount = running,
                 notes = if (pending == null) listOf("Pending job count not found") else emptyList(),
             ),
         )

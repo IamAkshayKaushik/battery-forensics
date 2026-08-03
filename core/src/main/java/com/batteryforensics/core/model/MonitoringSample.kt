@@ -21,6 +21,25 @@ data class MonitoringSample(
     val wifiRssiDbm: Int?,
     val cellularRssiDbm: Int?,
     val networkType: String?,
+    /** Absolute charge current while plugged (µA), when measurable. */
+    val chargingCurrentMicroamps: Int? = null,
+    /** portrait / landscape / unknown */
+    val orientation: String? = null,
+    val cellId: String? = null,
+    val carrierName: String? = null,
+    /** Best-effort band / RAT hint (e.g. n78, Band 3). */
+    val cellularBand: String? = null,
+    val bluetoothOn: Boolean? = null,
+    val bluetoothConnected: Boolean? = null,
+    val locationEnabled: Boolean? = null,
+    val nfcEnabled: Boolean? = null,
+    val hotspotOn: Boolean? = null,
+    /** Package name from UsageStats when permitted. */
+    val foregroundApp: String? = null,
+    /** low / moderate / critical / unknown */
+    val memoryPressure: String? = null,
+    val storageFreeBytes: Long? = null,
+    val storageFreePercent: Float? = null,
 )
 
 @Serializable

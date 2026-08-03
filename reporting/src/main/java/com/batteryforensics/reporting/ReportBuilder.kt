@@ -14,6 +14,11 @@ data class ForensicReport(
     val samples: List<MonitoringSample>,
     val diagnoses: List<Diagnosis>,
     val unknownFactors: List<String>,
+    val privilegedFindings: List<String> = emptyList(),
+    val timelineNotes: List<String> = emptyList(),
+    val historicalNotes: List<String> = emptyList(),
+    val differentialNotes: List<String> = emptyList(),
+    val chartRefs: List<String> = emptyList(),
 )
 
 class ReportBuilder {
@@ -21,7 +26,17 @@ class ReportBuilder {
         device: DeviceInfo,
         samples: List<MonitoringSample>,
         investigation: InvestigationResult,
-        unknownFactors: List<String> = defaultUnknowns(samples),
+        unknownFactors: List<String> = defaultUnknowns(samples, investigation.privilegedUsed),
+        privilegedFindings: List<String> = emptyList(),
+        timelineNotes: List<String> = defaultTimeline(samples),
+        historicalNotes: List<String> = emptyList(),
+        differentialNotes: List<String> = listOf(
+            "Use in-app Differential Analysis to compare a healthy night vs a problem night.",
+        ),
+        chartRefs: List<String> = listOf(
+            "In-app: Live Monitor sparklines (battery %, temp, current)",
+            "In-app: Timeline / overnight replay for event markers",
+        ),
     ): ForensicReport = ForensicReport(
         generatedAtEpochMs = investigation.evaluatedAtEpochMs,
         device = device,
@@ -29,15 +44,39 @@ class ReportBuilder {
         samples = samples,
         diagnoses = investigation.diagnoses,
         unknownFactors = unknownFactors,
+        privilegedFindings = privilegedFindings,
+        timelineNotes = timelineNotes,
+        historicalNotes = historicalNotes,
+        differentialNotes = differentialNotes,
+        chartRefs = chartRefs,
     )
 
-    private fun defaultUnknowns(samples: List<MonitoringSample>): List<String> = buildList {
+    private fun defaultTimeline(samples: List<MonitoringSample>): List<String> {
+        if (samples.isEmpty()) return listOf("No samples in window")
+        val ordered = samples.sortedBy { it.timestampEpochMs }
+        return listOf(
+            "Window ${ordered.first().timestampEpochMs} → ${ordered.last().timestampEpochMs} (${samples.size} samples)",
+            "Replay meaningful events inside Timeline / overnight replay — not every sample row.",
+        )
+    }
+
+    private fun defaultUnknowns(samples: List<MonitoringSample>, privilegedUsed: Boolean): List<String> = buildList {
         if (samples.none { it.cellularRssiDbm != null }) {
-            add("Cellular RSSI unavailable without additional permissions or Shizuku")
+            add("Cellular RSSI unavailable without location permission or privileged APIs")
+        }
+        if (samples.none { it.bluetoothOn != null }) {
+            add("Bluetooth state unavailable (needs BLUETOOTH_CONNECT on API 31+)")
+        }
+        if (samples.none { it.cellularBand != null }) {
+            add("Cellular band unavailable without OEM/privileged APIs")
         }
         if (samples.size < 10) {
             add("Short observation window — capture more Flight Recorder data for stronger confidence")
         }
-        add("Wake locks / AlarmManager / JobScheduler require dumpsys (optional Shizuku path)")
+        if (!privilegedUsed) {
+            add("Wake locks / AlarmManager / JobScheduler / Doze depth require dumpsys (optional Shizuku path)")
+        }
+        add("Sensor HAL drain (IMU continuous) is not sampled — skipped unless OEM dumpsys provides it")
+        add("Never treat dumpsys-inferred RRC / modem state machines as Measured")
     }
 }

@@ -4,23 +4,32 @@ Generated on-device by `AiReportGenerator`. LLMs are assistants — not the diag
 
 ## Required sections
 
-1. **Executive Summary** — top ranked causes or explicit insufficiency statement
-2. **Device Information**
-3. **Investigation Window** — start/end, sample count, battery delta
-4. **Evidence** — per diagnosis with confidence labels, supporting metrics, counter-evidence, actions
-5. **Root Cause Ranking** — table
-6. **Supporting Metrics Snapshot** — latest sample
-7. **Historical / Differential Notes**
-8. **Unknown Factors** — missing permissions / short window / dumpsys gaps
-9. **Timeline Notes**
-10. **Privacy**
-11. **LLM Instruction Block** — Measured vs Derived vs Inferred; no invented fields; no fake RRC
+1. **Executive Summary**
+2. **Battery Overview**
+3. **Device Info**
+4. **Timeline**
+5. **Historical Stats**
+6. **Evidence**
+7. **Confidence**
+8. **Measured / Derived / Inferred**
+9. **Charts refs**
+10. **Chemistry / Thermal / Network / Wake locks / Alarms / Doze / Apps**
+11. **Shizuku Findings**
+12. **Differential**
+13. **Root Cause Ranking**
+14. **Recommendations**
+15. **Unknown Factors**
+16. **Supporting Metrics Snapshot**
+17. **Raw appendix**
+18. **LLM Instruction Block** — asks for probabilities: hardware issue, software issue, battery degraded, modem responsible, rogue app, Android bug, battery replacement help
 
-## Formats
+## Formats / share
 
 * Markdown (AI-ready) — primary
-* JSON — full `ForensicReport` serialization
+* JSON — full `ForensicReport`
 * CSV — full sample columns
 * HTML — ranked causes + evidence
-* ZIP — bundle of the above
-* SQLite snapshot — portable `.sql` INSERT script (local)
+* ZIP — bundle + optional Room `.db` binary + SQL text
+* SQL snapshot — portable `.sql` TEXT (honestly labeled; not a binary SQLite file)
+
+**User deliverable:** Export screen saves under app-specific `files/exports/session_*` and shares via `FileProvider` + `ACTION_SEND` chooser.

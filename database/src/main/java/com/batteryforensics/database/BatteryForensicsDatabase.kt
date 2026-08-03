@@ -13,7 +13,7 @@ import com.batteryforensics.database.entity.TimelineEventEntity
         MonitoringSampleEntity::class,
         TimelineEventEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

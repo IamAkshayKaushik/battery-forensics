@@ -69,11 +69,14 @@ class DiagnosticsViewModel @Inject constructor(
                 return@launch
             }
 
+            // Prior window as baseline for regression rule (previous 12h before current).
+            val baseline = monitoringRepository.samplesBetween(start - 12 * 60 * 60 * 1000L, start)
+
             val settings = settingsRepository.settings.first()
-            val privileged = if (settings.advancedDiagnosticsEnabled) {
+            val (privilegedUi, privilegedEvidence) = if (settings.advancedDiagnosticsEnabled) {
                 withContext(Dispatchers.IO) {
                     val snap = shizukuCollector.collect(context)
-                    PrivilegedUiSummary(
+                    val ui = PrivilegedUiSummary(
                         availabilityLabel = snap.availability.label(),
                         usedDumpsys = snap.availability == ShizukuAvailability.Available && snap.hasAnyData,
                         errors = snap.errors,
@@ -99,7 +102,7 @@ class DiagnosticsViewModel @Inject constructor(
                                 )
                             }
                             snap.jobs?.let { j ->
-                                add("Jobs: pending=${j.pendingJobCount ?: "?"}")
+                                add("Jobs: pending=${j.pendingJobCount ?: "?"} running=${j.runningJobCount ?: "?"}")
                             }
                             snap.batteryStats?.let { b ->
                                 add(
@@ -109,6 +112,15 @@ class DiagnosticsViewModel @Inject constructor(
                             snap.power?.let { p ->
                                 add("Power: wakeLockCount=${p.wakeLockCount ?: "?"}")
                             }
+                            snap.activity?.let { a ->
+                                add(
+                                    "Activity: resumed=${a.topResumedActivity ?: "?"} " +
+                                        "fgs=${a.foregroundServiceHints.take(3).joinToString()}",
+                                )
+                            }
+                            snap.cmdBattery?.let { c ->
+                                add("cmd battery: level=${c.level ?: "?"} status=${c.statusLine ?: "?"}")
+                            }
                             snap.usageStats?.standbyBucketHints?.take(3)?.forEach { add("Standby: $it") }
                             snap.thermalService?.currentStatus?.let { add("Thermal service: $it") }
                             if (isEmpty() && snap.availability != ShizukuAvailability.Available) {
@@ -116,6 +128,7 @@ class DiagnosticsViewModel @Inject constructor(
                             }
                         },
                     )
+                    ui to snap.toPrivilegedEvidence().takeIf { it.hasAnyData }
                 }
             } else {
                 PrivilegedUiSummary(
@@ -123,19 +136,23 @@ class DiagnosticsViewModel @Inject constructor(
                     usedDumpsys = false,
                     errors = emptyList(),
                     lines = listOf("Enable Advanced diagnostics (Shizuku) in Settings to run dumpsys collectors."),
-                )
+                ) to null
             }
 
-            val result = engine.investigate(samples)
+            val result = engine.investigate(
+                samples = samples,
+                privileged = privilegedEvidence,
+                baselineSamples = baseline,
+            )
             _uiState.update {
                 it.copy(
                     diagnoses = result.diagnoses,
                     sampleCount = result.sampleCount,
                     investigating = false,
-                    privileged = privileged,
+                    privileged = privilegedUi,
                     message = when {
-                        result.diagnoses.isEmpty() && privileged.usedDumpsys ->
-                            "Evaluated ${result.sampleCount} samples — no rules crossed thresholds. Shizuku dumpsys evidence is shown below."
+                        result.diagnoses.isEmpty() && privilegedUi.usedDumpsys ->
+                            "Evaluated ${result.sampleCount} samples — no rules crossed thresholds. Shizuku dumpsys evidence fed the rule engine."
                         result.diagnoses.isEmpty() ->
                             "Evaluated ${result.sampleCount} samples — no rules crossed their evidence thresholds."
                         else -> null

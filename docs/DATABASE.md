@@ -1,6 +1,10 @@
 # Database schema
 
-Room database: `battery_forensics.db` (version 1)
+Room database: `battery_forensics.db` (**version 2**)
+
+## Migration note
+
+v1→v2 adds monitoring columns. Debug builds use `fallbackToDestructiveMigration()` (see `docs/MONITORING.md`). Local samples are wiped on upgrade until a typed Migration ships.
 
 ## `monitoring_samples`
 
@@ -23,6 +27,15 @@ Room database: `battery_forensics.db` (version 1)
 | wifiRssiDbm | INTEGER? | Measured |
 | cellularRssiDbm | INTEGER? | Measured when available |
 | networkType | TEXT? | lte/5g/… |
+| chargingCurrentMicroamps | INTEGER? | while charging |
+| orientation | TEXT? | |
+| cellId / carrierName / cellularBand | TEXT? | best-effort |
+| bluetoothOn / bluetoothConnected | INTEGER? | |
+| locationEnabled / nfcEnabled / hotspotOn | INTEGER? | |
+| foregroundApp | TEXT? | UsageStats |
+| memoryPressure | TEXT? | |
+| storageFreeBytes | INTEGER? | |
+| storageFreePercent | REAL? | |
 
 ## `timeline_events`
 

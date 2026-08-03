@@ -18,4 +18,16 @@ object TimeConstants {
     const val RAPID_HEAT_C_PER_MINUTE = 0.4
     const val MODEM_HEAT_TEMP_C = 39f
     const val FGS_DRAIN_PERCENT_PER_HOUR = 4.0
+    /** Extreme ΔT distinct from mild rapid heat — thermal runaway-ish. */
+    const val THERMAL_RUNAWAY_DELTA_C = 12f
+    const val THERMAL_RUNAWAY_TEMP_C = 48f
+    const val ALARM_WAKEUP_STORM_THRESHOLD = 40
+    const val WAKE_LOCK_ABUSE_THRESHOLD = 8
+    const val JOB_PENDING_THRASH_THRESHOLD = 25
+    const val HIGH_REFRESH_DEDICATED_HZ = 120f
+    const val INEFFICIENT_CHARGE_CURRENT_UA = 500_000
+    const val STORAGE_LOW_PERCENT = 8f
+    const val WORKMANAGER_MIN_PERIOD_MS = 15 * MILLIS_PER_MINUTE
+    /** Fine Flight Recorder floor (user preference may be higher). */
+    const val FLIGHT_RECORDER_MIN_INTERVAL_MS = 5_000L
 }

@@ -722,6 +722,7 @@ class ThermalThrottlingRule : ForensicRule {
 /** Convenience for tests and manual construction. */
 object DefaultRules {
     fun all(): Set<ForensicRule> = setOf(
+        // Sample-based (existing)
         WeakCellularSignalRule(),
         ExcessiveScreenBrightnessRule(),
         ElevatedTemperatureRule(),
@@ -733,5 +734,24 @@ object DefaultRules {
         HighDischargeCurrentRule(),
         FrequentNetworkTransitionsRule(),
         ThermalThrottlingRule(),
+        // Sample-based (expanded causes)
+        LocationEnabledDrainRule(),
+        BluetoothLeftOnDrainRule(),
+        HotspotOnDrainRule(),
+        HighRefreshWhileScreenOnRule(),
+        ThermalRunawayIshRule(),
+        ChargingInefficiencyHeatRule(),
+        BaselineAnomalyRegressionRule(),
+        NfcLeftOnDrainRule(),
+        LowStoragePressureRule(),
+        // Privileged dumpsys-based
+        DozeFailureRule(),
+        FrequentDozeExitsRule(),
+        AlarmStormRule(),
+        WakeLockAbuseRule(),
+        AppStandbyBypassRule(),
+        ForegroundServiceAbuseRule(),
+        GooglePlayServicesWakeupRule(),
+        JobSchedulerThrashRule(),
     )
 }

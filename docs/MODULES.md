@@ -11,10 +11,10 @@
 | thermal | `com.batteryforensics.thermal` | PowerManager thermal + ThermalAnalyzer |
 | telephony | `com.batteryforensics.telephony` | Network type + CellInfo RSSI when permitted |
 | wifi | `com.batteryforensics.wifi` | Wi-Fi connectivity / RSSI |
-| ruleengine | `com.batteryforensics.ruleengine` | Forensic rules + ranking (11 rules) |
+| ruleengine | `com.batteryforensics.ruleengine` | Forensic rules + ranking (~28 rules; privileged + sample) |
 | diagnostics | `com.batteryforensics.diagnostics` | Investigation + DifferentialAnalyzer |
-| parser | `com.batteryforensics.parser` | dumpsys parsers (batterystats, power, deviceidle, alarm, jobs, usagestats, thermal) |
-| shizuku | `com.batteryforensics.shizuku` | Real Shizuku API + provider; dumpsys collector when authorized |
+| parser | `com.batteryforensics.parser` | dumpsys/cmd parsers (batterystats, power, deviceidle, alarm, jobs, usagestats, thermal, activity, cmd battery/jobs) |
+| shizuku | `com.batteryforensics.shizuku` | Real Shizuku API + provider; dumpsys → PrivilegedEvidence for RuleEngine |
 | permissions | `com.batteryforensics.permissions` | Permission specs, rationales, grant helpers (see docs/PERMISSIONS.md) |
 | reporting | `com.batteryforensics.reporting` | ForensicReport builder |
 | ai | `com.batteryforensics.ai` | Markdown AI report |
