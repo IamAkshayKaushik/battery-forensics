@@ -1,0 +1,8 @@
+WifiService state - Wi-Fi is enabled
+mWifiEnabled=true
+mWifiInfo SSID: "ForensicsLab" BSSID: aa:bb:cc:dd:ee:ff RSSI: -92 dBm
+Supplicant state: COMPLETED
+mScanning=true
+Scan results: 14
+ScanResult{SSID: NeighborA}
+ScanResult{SSID: NeighborB}

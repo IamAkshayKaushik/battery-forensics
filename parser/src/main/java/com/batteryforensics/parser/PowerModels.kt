@@ -36,10 +36,11 @@ data class UsageStatsSummary(
     val bypassPackageHints: List<String> = emptyList(),
 )
 
-/** Best-effort `dumpsys activity` stub summary. */
+/** Best-effort `dumpsys activity` / `activity services` stub summary. */
 data class ActivitySummary(
     val foregroundServiceHints: List<String> = emptyList(),
     val topResumedActivity: String? = null,
+    val runningServiceHints: List<String> = emptyList(),
     val notes: List<String> = emptyList(),
 )
 
@@ -89,4 +90,46 @@ data class DozeTimelineSummary(
     val transitions: List<DozeStateTransition> = emptyList(),
     val motionTriggeredInterruptions: Int = 0,
     val locationTriggeredInterruptions: Int = 0,
+)
+
+/** Best-effort `dumpsys wifi` summary for radio-drain context. */
+data class WifiDumpSummary(
+    val wifiEnabled: Boolean? = null,
+    val connectedRssiDbm: Int? = null,
+    val connectedSsidHint: String? = null,
+    val scanResultCount: Int? = null,
+    val isScanning: Boolean? = null,
+    val supplicantState: String? = null,
+    val notes: List<String> = emptyList(),
+)
+
+/** Best-effort `dumpsys connectivity` summary. */
+data class ConnectivitySummary(
+    val activeDefaultNetwork: String? = null,
+    val transports: List<String> = emptyList(),
+    val validated: Boolean? = null,
+    val networkAgentCount: Int? = null,
+    val notes: List<String> = emptyList(),
+)
+
+/** Best-effort `dumpsys sensorservice` — continuous listener hints only. */
+data class SensorServiceSummary(
+    val activeSensorCount: Int? = null,
+    val continuousListenerHints: List<String> = emptyList(),
+    val notes: List<String> = emptyList(),
+)
+
+/** Best-effort `dumpsys location` — provider / request hints. */
+data class LocationDumpSummary(
+    val providersEnabled: List<String> = emptyList(),
+    val activeRequestHints: List<String> = emptyList(),
+    val gpsListenerCount: Int? = null,
+    val notes: List<String> = emptyList(),
+)
+
+/** Best-effort `dumpsys notification` — wake-adjacent listener hints. */
+data class NotificationDumpSummary(
+    val activeNotificationCount: Int? = null,
+    val listenerHints: List<String> = emptyList(),
+    val notes: List<String> = emptyList(),
 )

@@ -1,5 +1,9 @@
 package com.batteryforensics.app.ui.navigation
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -8,10 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Biotech
+import androidx.compose.material.icons.outlined.DeviceThermostat
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.TravelExplore
+import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -51,9 +58,9 @@ enum class AppDestination(
     Diagnostics("diagnostics", "Causes", Icons.Outlined.TravelExplore, showInBottomBar = true),
     Settings("settings", "Settings", Icons.Outlined.Settings, showInBottomBar = true),
     Chemistry("chemistry", "Chemistry", Icons.Outlined.Biotech),
-    Thermal("thermal", "Thermal", Icons.Outlined.TravelExplore),
-    Network("network", "Network", Icons.Outlined.TravelExplore),
-    Export("export", "Export", Icons.Outlined.TravelExplore),
+    Thermal("thermal", "Thermal", Icons.Outlined.DeviceThermostat),
+    Network("network", "Network", Icons.Outlined.Wifi),
+    Export("export", "Export", Icons.Outlined.IosShare),
 }
 
 @Composable
@@ -112,6 +119,18 @@ fun BatteryForensicsNavHost() {
                     navController = navController,
                     startDestination = AppDestination.Home.route,
                     modifier = Modifier.weight(1f),
+                    enterTransition = {
+                        fadeIn() + slideInHorizontally { it / 24 }
+                    },
+                    exitTransition = {
+                        fadeOut() + slideOutHorizontally { -it / 24 }
+                    },
+                    popEnterTransition = {
+                        fadeIn() + slideInHorizontally { -it / 24 }
+                    },
+                    popExitTransition = {
+                        fadeOut() + slideOutHorizontally { it / 24 }
+                    },
                 ) {
                     composable(AppDestination.Home.route) {
                         HomeScreen(

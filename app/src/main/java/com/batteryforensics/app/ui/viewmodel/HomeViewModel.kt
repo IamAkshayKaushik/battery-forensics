@@ -35,6 +35,7 @@ data class HomeUiState(
     val lastSampleAgeLabel: String? = null,
     val overnightDrainLabel: String? = null,
     val overallDrainLabel: String? = null,
+    val recentBatteryPercents: List<Float> = emptyList(),
     val topCauses: List<Diagnosis> = emptyList(),
     val missingPermissions: List<PermissionSpec> = emptyList(),
     val shizukuStatus: String = "Checking…",
@@ -84,6 +85,7 @@ class HomeViewModel @Inject constructor(
         val overall = stats?.overallDrainPercentPerHour?.let {
             "${"%.1f".format(it)}%/h overall"
         }
+        val spark = latest.mapNotNull { it.batteryPercent?.toFloat() }.asReversed().takeLast(24)
         val causes = if (windowSamples.size >= 4) {
             diagnosticsEngine.investigate(windowSamples).diagnoses.take(3)
         } else {
@@ -103,6 +105,7 @@ class HomeViewModel @Inject constructor(
             lastSampleAgeLabel = ageLabel,
             overnightDrainLabel = overnight,
             overallDrainLabel = overall,
+            recentBatteryPercents = spark,
             topCauses = causes,
             missingPermissions = AppPermissions.criticalMissing(context),
             shizukuStatus = shizuku.label(),

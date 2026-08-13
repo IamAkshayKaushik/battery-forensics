@@ -1,0 +1,5 @@
+ConnectivityService dumpsys:
+Active default network: 100
+NetworkAgentInfo{ni[100] TRANSPORT_WIFI TRANSPORT_CELLULAR validated=true}
+NetworkAgentInfo{ni[101] TRANSPORT_CELLULAR}
+Network{100}

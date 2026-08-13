@@ -68,6 +68,24 @@ class ExportViewModel @Inject constructor(
                                 snap.jobs?.let { add("jobs pending=${it.pendingJobCount}") }
                                 snap.activity?.let { add("activity fgs=${it.foregroundServiceHints.take(3)}") }
                                 snap.cmdBattery?.let { add("cmd battery level=${it.level}") }
+                                snap.wifi?.let {
+                                    add("wifi rssi=${it.connectedRssiDbm} scanning=${it.isScanning}")
+                                }
+                                snap.connectivity?.let {
+                                    add("connectivity transports=${it.transports}")
+                                }
+                                snap.location?.let {
+                                    add("location providers=${it.providersEnabled}")
+                                }
+                                snap.sensors?.let {
+                                    add("sensors active=${it.activeSensorCount}")
+                                }
+                                snap.notifications?.let {
+                                    add("notifications active=${it.activeNotificationCount}")
+                                }
+                                snap.batteryStats?.checkinUidDrainHints?.take(3)?.forEach {
+                                    add("batterystats checkin ${it.packageName}=${it.count}")
+                                }
                             } else {
                                 add(snap.availability.toString())
                             }

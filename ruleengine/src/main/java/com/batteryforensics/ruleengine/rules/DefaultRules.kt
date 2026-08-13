@@ -756,5 +756,8 @@ object DefaultRules {
         ForegroundServiceAbuseRule(),
         GooglePlayServicesWakeupRule(),
         JobSchedulerThrashRule(),
+        WeakWifiDumpsysRule(),
+        LocationProviderActiveRule(),
+        ContinuousSensorListenerRule(),
     )
 }

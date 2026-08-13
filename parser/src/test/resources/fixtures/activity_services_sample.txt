@@ -1,0 +1,7 @@
+ACTIVITY MANAGER SERVICES
+  * ServiceRecord{abc123 com.example.tracker/.SyncService}
+    app=ProcessRecord{def 10123:com.example.tracker/u0a123}
+    isForeground=true com.example.tracker.SyncService
+  * ServiceRecord{xyz789 com.music.app/.PlayerService}
+    app=ProcessRecord{ghi 10155:com.music.app/u0a155}
+mResumedActivity=ActivityRecord{com.example/.Main}

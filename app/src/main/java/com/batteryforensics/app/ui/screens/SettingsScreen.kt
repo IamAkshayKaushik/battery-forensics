@@ -2,7 +2,10 @@ package com.batteryforensics.app.ui.screens
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,16 +46,22 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         title = "Settings",
         subtitle = "Privacy-first. No analytics, no telemetry, no ads. ${AppPermissions.RATIONALE}",
     ) {
-        SectionHeader("Monitoring")
-        Text("Periodic monitoring (WorkManager)", style = MaterialTheme.typography.titleMedium)
-        Switch(
-            checked = state.settings.periodicMonitoringEnabled,
-            onCheckedChange = {
-                if (it) permissions.requestMonitoringPermissions()
-                viewModel.setPeriodicMonitoring(it)
+        SectionHeader("Monitoring", "WorkManager is coarse; Flight Recorder honors fine intervals.")
+        ListItem(
+            headlineContent = { Text("Periodic monitoring") },
+            supportingContent = { Text("WorkManager background samples (15 min floor)") },
+            trailingContent = {
+                Switch(
+                    checked = state.settings.periodicMonitoringEnabled,
+                    onCheckedChange = {
+                        if (it) permissions.requestMonitoringPermissions()
+                        viewModel.setPeriodicMonitoring(it)
+                    },
+                    modifier = Modifier.semantics { contentDescription = "Toggle periodic monitoring" },
+                )
             },
+            modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(8.dp))
         MetricRow(
             "Sample interval",
             when (state.settings.sampleIntervalMs) {
@@ -62,40 +71,50 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 15 * TimeConstants.MILLIS_PER_MINUTE -> "15 min (WorkManager floor)"
                 else -> "${state.settings.sampleIntervalMs / 1000}s"
             },
+            "DERIVED",
+        )
+        Text(
             "WorkManager cannot period <15 min. Flight Recorder FGS honors this Settings interval for fine sampling.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
         )
         TextButton(onClick = viewModel::cycleSampleInterval) {
             Text("Cycle interval preference")
         }
 
-        Spacer(Modifier.height(12.dp))
-        Text("Flight Recorder (foreground)", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Continuous sampling while enabled. Uses Settings sample interval (WorkManager alone is capped at 15 min and cannot honor shorter periods).",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Switch(
-            checked = state.settings.flightRecorderEnabled,
-            onCheckedChange = { enabled ->
-                if (enabled) {
-                    permissions.requestFlightRecorderPermissions()
-                    viewModel.setFlightRecorder(true)
-                    context.startForegroundService(Intent(context, FlightRecorderService::class.java))
-                } else {
-                    viewModel.setFlightRecorder(false)
-                    context.startService(
-                        Intent(context, FlightRecorderService::class.java).apply {
-                            action = FlightRecorderService.ACTION_STOP
-                        },
-                    )
-                }
+        Spacer(Modifier.height(8.dp))
+        ListItem(
+            headlineContent = { Text("Flight Recorder") },
+            supportingContent = {
+                Text("Continuous foreground sampling while enabled")
             },
+            trailingContent = {
+                Switch(
+                    checked = state.settings.flightRecorderEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            permissions.requestFlightRecorderPermissions()
+                            viewModel.setFlightRecorder(true)
+                            context.startForegroundService(Intent(context, FlightRecorderService::class.java))
+                        } else {
+                            viewModel.setFlightRecorder(false)
+                            context.startService(
+                                Intent(context, FlightRecorderService::class.java).apply {
+                                    action = FlightRecorderService.ACTION_STOP
+                                },
+                            )
+                        }
+                    },
+                    modifier = Modifier.semantics { contentDescription = "Toggle Flight Recorder" },
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(20.dp))
         SectionHeader(
             "Permissions",
-            "Requested when you enable features. Denied permanently? Use App Settings. Documented in docs/PERMISSIONS.md.",
+            "Requested when you enable features. Denied permanently? Use App Settings.",
         )
         state.permissions.forEach { row ->
             StatusPanel(
@@ -126,12 +145,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         }
 
         Spacer(Modifier.height(20.dp))
-        SectionHeader("Advanced diagnostics (Shizuku)")
+        SectionHeader("Advanced diagnostics (Shizuku)", "Privileged dumpsys → typed parsers → rules.")
         StatusPanel(
-            title = "Shizuku",
+            title = "Shizuku bridge",
             body = when (state.shizuku) {
                 ShizukuAvailability.Available ->
-                    "Authorized. Investigate runs dumpsys → typed parsers for Doze, wake locks, alarms, jobs."
+                    "Authorized. Investigate runs dumpsys for Doze, wake locks, alarms, jobs, Wi-Fi, location, sensors, and notifications."
                 ShizukuAvailability.NotInstalled ->
                     "Install Shizuku from the Play Store / GitHub, start it via wireless debugging or root, then authorize this app."
                 ShizukuAvailability.NotRunning ->
@@ -165,11 +184,19 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text("Use advanced diagnostics when available", style = MaterialTheme.typography.titleMedium)
-        Switch(
-            checked = state.settings.advancedDiagnosticsEnabled,
-            onCheckedChange = viewModel::setAdvancedDiagnostics,
-            modifier = Modifier.semantics { contentDescription = "Toggle advanced diagnostics" },
+        ListItem(
+            headlineContent = { Text("Use advanced diagnostics") },
+            supportingContent = { Text("When Shizuku is available, feed dumpsys into the rule engine") },
+            trailingContent = {
+                Switch(
+                    checked = state.settings.advancedDiagnosticsEnabled,
+                    onCheckedChange = viewModel::setAdvancedDiagnostics,
+                    modifier = Modifier.semantics { contentDescription = "Toggle advanced diagnostics" },
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp),
         )
     }
 }

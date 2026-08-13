@@ -1,0 +1,7 @@
+Notification Manager State:
+Active notifications: 9
+NotificationRecord(0x1 pkg=com.chat.app)
+NotificationRecord(0x2 pkg=com.mail.app)
+listener=com.wearable.companion.NotificationListenerService
+NotificationListenerService pkg=com.example.mirror
+enqueued NotificationRecord

@@ -8,26 +8,36 @@ import com.batteryforensics.parser.ActivitySummary
 import com.batteryforensics.parser.AlarmSummary
 import com.batteryforensics.parser.BatteryStatsSummary
 import com.batteryforensics.parser.CmdBatterySummary
+import com.batteryforensics.parser.ConnectivitySummary
 import com.batteryforensics.parser.DeviceIdleSummary
 import com.batteryforensics.parser.DozeTimelineSummary
 import com.batteryforensics.parser.JobSchedulerSummary
+import com.batteryforensics.parser.LocationDumpSummary
+import com.batteryforensics.parser.NotificationDumpSummary
 import com.batteryforensics.parser.ParseResult
 import com.batteryforensics.parser.PowerSummary
+import com.batteryforensics.parser.SensorServiceSummary
 import com.batteryforensics.parser.ThermalServiceSummary
 import com.batteryforensics.parser.UsageStatsSummary
 import com.batteryforensics.parser.WakeLockSummary
+import com.batteryforensics.parser.WifiDumpSummary
 import com.batteryforensics.parser.activity.ActivityParser
 import com.batteryforensics.parser.alarm.AlarmParser
 import com.batteryforensics.parser.batterystats.BatteryStatsParser
 import com.batteryforensics.parser.cmd.CmdBatteryParser
 import com.batteryforensics.parser.cmd.CmdJobSchedulerParser
+import com.batteryforensics.parser.connectivity.ConnectivityParser
 import com.batteryforensics.parser.deviceidle.DeviceIdleParser
 import com.batteryforensics.parser.deviceidle.DozeParser
 import com.batteryforensics.parser.jobscheduler.JobSchedulerParser
+import com.batteryforensics.parser.location.LocationDumpParser
+import com.batteryforensics.parser.notification.NotificationDumpParser
 import com.batteryforensics.parser.power.PowerParser
 import com.batteryforensics.parser.power.WakeLockParser
+import com.batteryforensics.parser.sensor.SensorServiceParser
 import com.batteryforensics.parser.thermalservice.ThermalServiceParser
 import com.batteryforensics.parser.usagestats.UsageStatsParser
+import com.batteryforensics.parser.wifi.WifiDumpParser
 import com.batteryforensics.ruleengine.PrivilegedEvidence
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
@@ -65,6 +75,8 @@ fun ShizukuAvailability.limitedFeatures(): List<String> = when (this) {
         "AlarmManager wakeup packages",
         "JobScheduler pending jobs",
         "App Standby buckets",
+        "Wi-Fi / connectivity dumpsys",
+        "Location / sensor / notification dumpsys",
     )
 }
 
@@ -248,13 +260,20 @@ class ShizukuDiagnosticsCollector(
         val thermalService: ThermalServiceSummary? = null,
         val activity: ActivitySummary? = null,
         val cmdBattery: CmdBatterySummary? = null,
+        val wifi: WifiDumpSummary? = null,
+        val connectivity: ConnectivitySummary? = null,
+        val sensors: SensorServiceSummary? = null,
+        val location: LocationDumpSummary? = null,
+        val notifications: NotificationDumpSummary? = null,
         val errors: List<String> = emptyList(),
     ) {
         val hasAnyData: Boolean
             get() = batteryStats != null || power != null || wakeLocks != null ||
                 deviceIdle != null || doze != null || alarms != null ||
                 jobs != null || usageStats != null || thermalService != null ||
-                activity != null || cmdBattery != null
+                activity != null || cmdBattery != null || wifi != null ||
+                connectivity != null || sensors != null || location != null ||
+                notifications != null
 
         fun toPrivilegedEvidence(): PrivilegedEvidence = PrivilegedEvidence(
             batteryStats = batteryStats,
@@ -268,6 +287,11 @@ class ShizukuDiagnosticsCollector(
             thermalService = thermalService,
             activity = activity,
             cmdBattery = cmdBattery,
+            wifi = wifi,
+            connectivity = connectivity,
+            sensors = sensors,
+            location = location,
+            notifications = notifications,
             collectionErrors = errors,
         )
     }
@@ -284,9 +308,10 @@ class ShizukuDiagnosticsCollector(
             )
         }
         val errors = mutableListOf<String>()
-        fun dump(service: String): String? = gateway.runShellCommand("dumpsys $service").also {
-            if (it == null) errors += "Failed to dump $service"
-        }
+        fun dump(service: String, required: Boolean = true): String? =
+            gateway.runShellCommand("dumpsys $service").also {
+                if (it == null && required) errors += "Failed to dump $service"
+            }
         fun cmd(command: String): String? = gateway.runShellCommand(command).also {
             if (it == null) errors += "Failed: $command"
         }
@@ -302,8 +327,16 @@ class ShizukuDiagnosticsCollector(
             }
         }
 
+        fun mergeText(primary: String?, extra: String?): String? = when {
+            primary.isNullOrBlank() && extra.isNullOrBlank() -> null
+            primary.isNullOrBlank() -> extra
+            extra.isNullOrBlank() -> primary
+            else -> primary + "\n" + extra
+        }
+
         val powerRaw = dump("power")
-        val idleRaw = dump("deviceidle")
+        // Prefer history-rich idle dump when available; fall back to default.
+        val idleRaw = mergeText(dump("deviceidle -a", required = false), dump("deviceidle"))
         val jobsRaw = dump("jobscheduler")
         val jobsFromDumpsys = parse(jobsRaw) { JobSchedulerParser().parse(it) }
         val jobsFromCmd = if (jobsFromDumpsys?.pendingJobCount == null) {
@@ -312,9 +345,17 @@ class ShizukuDiagnosticsCollector(
         } else {
             null
         }
+        val batteryHuman = dump("batterystats")
+        val batteryCheckin = dump("batterystats -c", required = false)
+        val batteryMerged = mergeText(batteryHuman, batteryCheckin)
+        val activityRaw = mergeText(
+            dump("activity services", required = false),
+            dump("activity"),
+        )
+
         return PrivilegedSnapshot(
             availability = avail,
-            batteryStats = parse(dump("batterystats")) { BatteryStatsParser().parse(it) },
+            batteryStats = parse(batteryMerged) { BatteryStatsParser().parse(it) },
             power = parse(powerRaw) { PowerParser().parse(it) },
             wakeLocks = parse(powerRaw) { WakeLockParser().parse(it) },
             deviceIdle = parse(idleRaw) { DeviceIdleParser().parse(it) },
@@ -323,8 +364,17 @@ class ShizukuDiagnosticsCollector(
             jobs = jobsFromDumpsys ?: jobsFromCmd,
             usageStats = parse(dump("usagestats")) { UsageStatsParser().parse(it) },
             thermalService = parse(dump("thermalservice")) { ThermalServiceParser().parse(it) },
-            activity = parse(dump("activity")) { ActivityParser().parse(it) },
-            cmdBattery = parse(cmd("cmd battery get status") ?: cmd("cmd battery")) { CmdBatteryParser().parse(it) },
+            activity = parse(activityRaw) { ActivityParser().parse(it) },
+            cmdBattery = parse(cmd("cmd battery get status") ?: cmd("cmd battery")) {
+                CmdBatteryParser().parse(it)
+            },
+            wifi = parse(dump("wifi", required = false)) { WifiDumpParser().parse(it) },
+            connectivity = parse(dump("connectivity", required = false)) { ConnectivityParser().parse(it) },
+            sensors = parse(dump("sensorservice", required = false)) { SensorServiceParser().parse(it) },
+            location = parse(dump("location", required = false)) { LocationDumpParser().parse(it) },
+            notifications = parse(dump("notification", required = false)) {
+                NotificationDumpParser().parse(it)
+            },
             errors = errors,
         )
     }

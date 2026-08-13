@@ -1,0 +1,7 @@
+Sensor Service:
+active connections: 4
+SensorEventConnection package=com.fit.tracker
+Connection: com.example.steps
+Listener=com.oem.motion.PickUp
+SensorEventConnection
+SensorEventConnection

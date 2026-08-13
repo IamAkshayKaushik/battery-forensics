@@ -40,7 +40,8 @@ fun ExportScreen(viewModel: ExportViewModel = hiltViewModel()) {
         Spacer(Modifier.height(12.dp))
         if (state.markdownPreview.isBlank()) {
             EmptyInvestigationHint(
-                "Run Generate after capturing samples. Exports land under app-specific files/exports/.",
+                title = "No export yet",
+                text = "Run Generate after capturing samples. Exports land under app-specific files/exports/.",
             )
         } else {
             SectionHeader("Generated")

@@ -1,0 +1,7 @@
+Location Manager State:
+providers: [gps, network, fused]
+provider=gps enabled=true
+GpsLocationProvider listeners: 2
+LocationRequest by package com.maps.nav
+request from com.fitness.tracker
+GpsLocationProvider

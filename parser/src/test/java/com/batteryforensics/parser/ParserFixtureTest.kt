@@ -5,12 +5,17 @@ import com.batteryforensics.parser.alarm.AlarmParser
 import com.batteryforensics.parser.batterystats.BatteryStatsParser
 import com.batteryforensics.parser.cmd.CmdBatteryParser
 import com.batteryforensics.parser.cmd.CmdJobSchedulerParser
+import com.batteryforensics.parser.connectivity.ConnectivityParser
 import com.batteryforensics.parser.deviceidle.DeviceIdleParser
 import com.batteryforensics.parser.deviceidle.DozeParser
 import com.batteryforensics.parser.jobscheduler.JobSchedulerParser
+import com.batteryforensics.parser.location.LocationDumpParser
+import com.batteryforensics.parser.notification.NotificationDumpParser
 import com.batteryforensics.parser.power.PowerParser
 import com.batteryforensics.parser.power.WakeLockParser
+import com.batteryforensics.parser.sensor.SensorServiceParser
 import com.batteryforensics.parser.usagestats.UsageStatsParser
+import com.batteryforensics.parser.wifi.WifiDumpParser
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -186,6 +191,66 @@ class ParserFixtureTest {
         val result = CmdJobSchedulerParser().parse(raw) as ParseResult.Success
         assertThat(result.value.pendingJobCount).isEqualTo(11)
         assertThat(result.value.runningJobCount).isEqualTo(2)
+    }
+
+    @Test
+    fun wifi_parsesRssiAndScanning() {
+        val raw = readFixture("fixtures/wifi_sample.txt")
+        val result = WifiDumpParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.wifiEnabled).isTrue()
+        assertThat(result.value.connectedRssiDbm).isEqualTo(-92)
+        assertThat(result.value.isScanning).isTrue()
+        assertThat(result.value.scanResultCount).isAtLeast(2)
+    }
+
+    @Test
+    fun connectivity_parsesTransports() {
+        val raw = readFixture("fixtures/connectivity_sample.txt")
+        val result = ConnectivityParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.transports).containsAtLeast("WIFI", "CELLULAR")
+        assertThat(result.value.validated).isTrue()
+        assertThat(result.value.networkAgentCount).isAtLeast(1)
+    }
+
+    @Test
+    fun sensorservice_parsesListeners() {
+        val raw = readFixture("fixtures/sensorservice_sample.txt")
+        val result = SensorServiceParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.activeSensorCount).isAtLeast(2)
+        assertThat(result.value.continuousListenerHints).isNotEmpty()
+    }
+
+    @Test
+    fun location_parsesProvidersAndRequests() {
+        val raw = readFixture("fixtures/location_sample.txt")
+        val result = LocationDumpParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.providersEnabled).contains("gps")
+        assertThat(result.value.activeRequestHints).isNotEmpty()
+    }
+
+    @Test
+    fun notification_parsesActiveAndListeners() {
+        val raw = readFixture("fixtures/notification_sample.txt")
+        val result = NotificationDumpParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.activeNotificationCount).isAtLeast(1)
+        assertThat(result.value.listenerHints).isNotEmpty()
+    }
+
+    @Test
+    fun batterystats_parsesCheckinHints() {
+        val raw = readFixture("fixtures/batterystats_checkin_sample.txt")
+        val result = BatteryStatsParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.estimatedBatteryCapacityMah).isEqualTo(4500)
+        assertThat(result.value.checkinUidDrainHints).isNotEmpty()
+        assertThat(result.value.wifiRadioActiveMsHint).isEqualTo(180000L)
+    }
+
+    @Test
+    fun activity_parsesServicesDump() {
+        val raw = readFixture("fixtures/activity_services_sample.txt")
+        val result = ActivityParser().parse(raw) as ParseResult.Success
+        assertThat(result.value.runningServiceHints).isNotEmpty()
+        assertThat(result.value.foregroundServiceHints).isNotEmpty()
     }
 
     @Test

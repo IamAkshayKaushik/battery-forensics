@@ -20,6 +20,10 @@ data class BatteryStatsSummary(
     val screenOnDischargeMah: Double?,
     val estimatedBatteryCapacityMah: Int?,
     val notes: List<String> = emptyList(),
+    /** Checkin (`dumpsys batterystats -c`) uid drain hints — Derived. */
+    val checkinUidDrainHints: List<PackageCount> = emptyList(),
+    /** Radio / wifi active time hints from human or checkin dump when present. */
+    val wifiRadioActiveMsHint: Long? = null,
 )
 
 data class DeviceIdleSummary(

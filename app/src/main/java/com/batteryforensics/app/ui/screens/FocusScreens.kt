@@ -43,7 +43,8 @@ fun ChemistryScreen(viewModel: ChemistryViewModel = hiltViewModel()) {
         val report = state.report
         if (report == null) {
             EmptyInvestigationHint(
-                state.message
+                title = "Chemistry file thin",
+                text = state.message
                     ?: "No chemistry report yet. Capture samples across charge cycles for wear depth.",
             )
         } else {
@@ -122,7 +123,10 @@ fun ThermalScreen(viewModel: ThermalViewModel = hiltViewModel()) {
         Spacer(Modifier.height(8.dp))
         val report = state.report
         if (report == null) {
-            EmptyInvestigationHint(state.message ?: "No thermal data yet.")
+            EmptyInvestigationHint(
+                title = "Thermal quiet",
+                text = state.message ?: "No thermal data yet. Capture while charging or under load.",
+            )
         } else {
             MetricChipRow(
                 buildList {
@@ -165,7 +169,10 @@ fun ThermalScreen(viewModel: ThermalViewModel = hiltViewModel()) {
             Spacer(Modifier.height(12.dp))
             SectionHeader("Events")
             if (report.events.isEmpty()) {
-                EmptyInvestigationHint("No thermal events in this window.")
+                EmptyInvestigationHint(
+                    title = "No thermal events",
+                    text = "No thermal events in this window. Heat spikes appear here when ΔT/Δt crosses thresholds.",
+                )
             } else {
                 report.events.forEach { e ->
                     StatusPanel(
@@ -196,7 +203,10 @@ fun NetworkScreen(viewModel: NetworkViewModel = hiltViewModel()) {
         Spacer(Modifier.height(8.dp))
         val report = state.report
         if (report == null) {
-            EmptyInvestigationHint(state.message ?: "No network samples yet.")
+            EmptyInvestigationHint(
+                title = "Radio evidence locked",
+                text = state.message ?: "No network samples yet. Grant location + phone state, then capture.",
+            )
         } else {
             StatusPanel(
                 title = "Honesty note",

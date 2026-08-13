@@ -615,3 +615,194 @@ class DozeMotionLocationInterruptRule : ForensicRule {
         )
     }
 }
+
+/** Weak Wi-Fi RSSI from dumpsys wifi — radio may stay active hunting signal. */
+class WeakWifiDumpsysRule : ForensicRule {
+    override val id: String = "weak_wifi_dumpsys"
+    override val title: String = "Weak Wi-Fi signal (dumpsys)"
+
+    override fun evaluate(context: RuleContext): RuleEvaluation? {
+        val wifi = context.privileged?.wifi ?: return null
+        val rssi = wifi.connectedRssiDbm ?: return null
+        if (wifi.wifiEnabled == false) return null
+        if (rssi > -85) return null
+        val scanning = wifi.isScanning == true
+        val score = when {
+            rssi <= -95 && scanning -> 86
+            rssi <= -90 -> 80
+            else -> 72
+        }
+        return RuleEvaluation(
+            triggered = true,
+            diagnosis = Diagnosis(
+                id = id,
+                title = title,
+                category = DiagnosticCategory.NETWORK,
+                explanation =
+                    "dumpsys wifi reports RSSI=$rssi dBm" +
+                        (wifi.supplicantState?.let { " (supplicant=$it)" } ?: "") +
+                        (if (scanning) "; scanning flag set" else "") +
+                        ". Weak association often elevates radio active time — Derived from dumpsys, not Measured airtime.",
+                confidence = Confidence(score, ConfidenceLevel.DERIVED),
+                evidence = buildList {
+                    add(
+                        Evidence(
+                            id = "wifi_rssi_dump",
+                            description = "Connected Wi-Fi RSSI from dumpsys",
+                            metricKey = "wifi_rssi_dbm",
+                            observedValue = "$rssi dBm",
+                            threshold = "≤ -85 dBm",
+                            confidenceLevel = ConfidenceLevel.DERIVED,
+                        ),
+                    )
+                    if (scanning) {
+                        add(
+                            Evidence(
+                                id = "wifi_scanning",
+                                description = "Wi-Fi scanning flag",
+                                metricKey = "wifi_scanning",
+                                observedValue = "true",
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                },
+                supportingMetrics = listOfNotNull(
+                    wifi.scanResultCount?.let {
+                        SupportingMetric("scan_results", "Scan result count", it.toString())
+                    },
+                    wifi.connectedSsidHint?.let {
+                        SupportingMetric("ssid", "SSID hint", it)
+                    },
+                ),
+                counterEvidence = emptyList(),
+                recommendedActions = listOf(
+                    "Move closer to AP or use 5 GHz / Ethernet when stationary",
+                    "Disable Wi-Fi overnight if cellular is stronger indoors",
+                    "Re-run investigation after AP change to confirm RSSI recovery",
+                ),
+                probabilityPercent = score,
+            ),
+        )
+    }
+}
+
+/** Active GPS / location requests from dumpsys location. */
+class LocationProviderActiveRule : ForensicRule {
+    override val id: String = "location_provider_active"
+    override val title: String = "Active location providers (dumpsys)"
+
+    override fun evaluate(context: RuleContext): RuleEvaluation? {
+        val loc = context.privileged?.location ?: return null
+        val gpsOn = loc.providersEnabled.any { it.equals("gps", true) }
+        val requests = loc.activeRequestHints
+        val listeners = loc.gpsListenerCount ?: 0
+        if (!gpsOn && requests.isEmpty() && listeners < 1) return null
+        // Need overnight/screen-off samples to suggest drain relevance
+        val screenOff = context.samples.count { it.screenOn == false }
+        if (screenOff < 2 && requests.isEmpty() && listeners < 2) return null
+        val score = when {
+            listeners >= 2 || requests.size >= 2 -> 78
+            gpsOn && screenOff >= 4 -> 72
+            else -> 66
+        }
+        return RuleEvaluation(
+            triggered = true,
+            diagnosis = Diagnosis(
+                id = id,
+                title = title,
+                category = DiagnosticCategory.SENSORS,
+                explanation =
+                    "dumpsys location shows providers=${loc.providersEnabled.joinToString().ifBlank { "?" }}, " +
+                        "request packages=${requests.take(3).joinToString().ifBlank { "none" }}, " +
+                        "gpsListenerCount=$listeners. GPS while screen-off is a classic standby drain — Inferred correlation.",
+                confidence = Confidence(score, ConfidenceLevel.INFERRED),
+                evidence = buildList {
+                    if (loc.providersEnabled.isNotEmpty()) {
+                        add(
+                            Evidence(
+                                id = "loc_providers",
+                                description = "Enabled location providers",
+                                metricKey = "location_providers",
+                                observedValue = loc.providersEnabled.joinToString(),
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                    if (requests.isNotEmpty()) {
+                        add(
+                            Evidence(
+                                id = "loc_requests",
+                                description = "Active location request packages",
+                                metricKey = "location_requests",
+                                observedValue = requests.take(5).joinToString(),
+                                confidenceLevel = ConfidenceLevel.DERIVED,
+                            ),
+                        )
+                    }
+                },
+                supportingMetrics = listOf(
+                    SupportingMetric("screen_off_samples", "Screen-off samples in window", screenOff.toString()),
+                ),
+                counterEvidence = emptyList(),
+                recommendedActions = listOf(
+                    "Restrict background location for non-navigation apps",
+                    "Disable Precise location overnight when unused",
+                    "Check Timeline for location-triggered Doze exits",
+                ),
+                probabilityPercent = score,
+            ),
+        )
+    }
+}
+
+/** Continuous sensor listeners from dumpsys sensorservice. */
+class ContinuousSensorListenerRule : ForensicRule {
+    override val id: String = "continuous_sensor_listeners"
+    override val title: String = "Continuous sensor listeners (dumpsys)"
+
+    override fun evaluate(context: RuleContext): RuleEvaluation? {
+        val sensors = context.privileged?.sensors ?: return null
+        val count = sensors.activeSensorCount ?: sensors.continuousListenerHints.size
+        if (count < 2 && sensors.continuousListenerHints.isEmpty()) return null
+        if (count < 2) return null
+        val score = (68 + count * 3).coerceIn(68, 88)
+        return RuleEvaluation(
+            triggered = true,
+            diagnosis = Diagnosis(
+                id = id,
+                title = title,
+                category = DiagnosticCategory.SENSORS,
+                explanation =
+                    "dumpsys sensorservice hints activeSensorCount=$count, " +
+                        "packages=${sensors.continuousListenerHints.take(4).joinToString().ifBlank { "unattributed" }}. " +
+                        "Continuous listeners can prevent deep idle — Inferred from dump tokens, not HAL sampling.",
+                confidence = Confidence(score, ConfidenceLevel.INFERRED),
+                evidence = listOf(
+                    Evidence(
+                        id = "sensor_active",
+                        description = "Active / continuous sensor hint count",
+                        metricKey = "sensor_active_count",
+                        observedValue = count.toString(),
+                        threshold = "≥ 2",
+                        confidenceLevel = ConfidenceLevel.DERIVED,
+                    ),
+                ),
+                supportingMetrics = listOf(
+                    SupportingMetric(
+                        "listener_pkgs",
+                        "Listener package hints",
+                        sensors.continuousListenerHints.take(5).joinToString(),
+                    ),
+                ),
+                counterEvidence = emptyList(),
+                recommendedActions = listOf(
+                    "Force-stop fitness / step / always-listening apps overnight",
+                    "Disable unused motion / pick-up gestures in OEM settings",
+                    "Cross-check wake-lock taxonomy for sensor tags",
+                ),
+                probabilityPercent = score,
+            ),
+        )
+    }
+}

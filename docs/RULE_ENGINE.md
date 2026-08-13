@@ -21,7 +21,7 @@ Each triggered evaluation must produce a `Diagnosis` with evidence, confidence l
 
 Privileged dumpsys never claims Measured for RRC/modem state machines — use Derived/Inferred.
 
-## Bundled rules (`DefaultRules.all()`) — 31 rules
+## Bundled rules (`DefaultRules.all()`) — 34 rules
 
 ### Sample-based
 
@@ -59,10 +59,13 @@ Privileged dumpsys never claims Measured for RRC/modem state machines — use De
 29. fgs_abuse
 30. gms_wakeup_pattern (Inferred)
 31. jobscheduler_thrash
+32. weak_wifi_dumpsys (Derived)
+33. location_provider_active (Inferred)
+34. continuous_sensor_listeners (Inferred)
 
 ### Skipped (no signal)
 
-- Continuous IMU / sensor HAL drain — not sampled; unknown-factor note only.
+- Continuous IMU / sensor HAL sampling loop — dumpsys sensor *hints* only; no streaming HAL.
 
 ## Ranking
 

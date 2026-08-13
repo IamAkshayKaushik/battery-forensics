@@ -1,15 +1,13 @@
 package com.batteryforensics.app.ui.screens
 
 import android.content.Intent
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -17,19 +15,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.batteryforensics.app.ui.components.DiagnosisCard
 import com.batteryforensics.app.ui.components.EmptyInvestigationHint
+import com.batteryforensics.app.ui.components.FocusNavRow
 import com.batteryforensics.app.ui.components.ForensicScreen
-import com.batteryforensics.app.ui.components.MetricChipRow
+import com.batteryforensics.app.ui.components.InvestigationHero
 import com.batteryforensics.app.ui.components.MetricRow
 import com.batteryforensics.app.ui.components.SectionHeader
 import com.batteryforensics.app.ui.components.StatusPanel
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.foundation.layout.heightIn
 import com.batteryforensics.app.ui.permissions.rememberPermissionController
 import com.batteryforensics.app.ui.viewmodel.HomeViewModel
 import com.batteryforensics.monitoring.service.FlightRecorderService
@@ -51,7 +49,6 @@ fun HomeScreen(
     val context = LocalContext.current
     val permissions = rememberPermissionController()
 
-    // First-run guided request — once. Permanently denied → Settings deep link later.
     LaunchedEffect(permissions.revision, state.settings.initialPermissionPromptShown) {
         if (state.settings.initialPermissionPromptShown) return@LaunchedEffect
         val missing = permissions.missingRuntime(AppPermissions.monitoringRuntime)
@@ -65,8 +62,17 @@ fun HomeScreen(
         title = "Battery Forensics",
         subtitle = "Don't guess. Investigate. Evidence-first diagnostics stay on this device.",
     ) {
+        InvestigationHero(
+            batteryPercent = state.latestBatteryPercent,
+            drainLabel = state.overallDrainLabel,
+            standbyLabel = state.overnightDrainLabel,
+            freshnessLabel = state.lastSampleAgeLabel?.let { "Sample $it" },
+            sparklineValues = state.recentBatteryPercents,
+        )
+
         val showSetup = state.missingPermissions.isNotEmpty() && !state.settings.setupBannerDismissed
         if (showSetup) {
+            Spacer(Modifier.height(16.dp))
             StatusPanel(
                 title = "Setup incomplete",
                 body = buildString {
@@ -80,31 +86,14 @@ fun HomeScreen(
                 secondaryAction = "Open Settings",
                 onSecondary = permissions.openAppSettings,
             )
-            Spacer(Modifier.height(8.dp))
             TextButton(onClick = viewModel::dismissSetupBanner) {
                 Text("Hide for now")
             }
-            Spacer(Modifier.height(16.dp))
         }
 
-        SectionHeader("Investigation HQ", "Status → ranked causes → evidence. Everything stays on this device.")
-        MetricChipRow(
-            buildList {
-                add("Samples" to state.sampleCount.toString())
-                state.latestBatteryPercent?.let { add("Battery" to "$it%") }
-                state.latestTempC?.let { add("Temp" to "${"%.1f".format(it)}°C") }
-                state.overallDrainLabel?.let { add("Drain 12h" to it) }
-                state.overnightDrainLabel?.let { add("Standby" to it) }
-            },
-        )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(20.dp))
+        SectionHeader("Evidence snapshot", "Measured signals feeding the investigation.")
         MetricRow("Samples captured", state.sampleCount.toString(), "MEASURED")
-        state.latestBatteryPercent?.let {
-            MetricRow("Latest battery", "$it%", "MEASURED")
-        }
-        state.lastSampleAgeLabel?.let {
-            MetricRow("Last sample", it, "MEASURED")
-        }
         state.latestTempC?.let {
             MetricRow("Latest temperature", "${"%.1f".format(it)}°C", "MEASURED")
         }
@@ -115,21 +104,15 @@ fun HomeScreen(
             "Locked — grant location + phone state",
             "NEEDS PERMISSION",
         )
-        state.overallDrainLabel?.let {
-            MetricRow("Drain rate (12h)", it, "DERIVED")
-        }
-        state.overnightDrainLabel?.let {
-            MetricRow("Standby drain", it, "DERIVED")
-        }
 
         Spacer(Modifier.height(16.dp))
         StatusPanel(
             title = "Advanced diagnostics (Shizuku)",
             body = when (state.shizukuAvailability) {
                 ShizukuAvailability.Available ->
-                    "Dumpsys collectors can deepen Doze, wake lock, alarm, and JobScheduler evidence."
+                    "Dumpsys collectors deepen Doze, wake locks, alarms, Wi-Fi, location, sensors, and notification evidence."
                 ShizukuAvailability.NotRunning ->
-                    "Shizuku is installed but the service is not running. Open Shizuku and start it (wireless debugging pairing or root), then return here."
+                    "Shizuku is installed but the service is not running. Open Shizuku and start it, then return here."
                 ShizukuAvailability.PermissionDenied ->
                     "Shizuku is running. Authorize Battery Forensics to unlock dumpsys collectors."
                 ShizukuAvailability.NotInstalled ->
@@ -161,7 +144,8 @@ fun HomeScreen(
         } else {
             Spacer(Modifier.height(16.dp))
             EmptyInvestigationHint(
-                when {
+                title = "Case file empty",
+                text = when {
                     state.sampleCount == 0L ->
                         "No samples yet. Capture now, or start Flight Recorder overnight for standby evidence."
                     state.missingPermissions.any { it.title.contains("Location", ignoreCase = true) } ->
@@ -178,7 +162,7 @@ fun HomeScreen(
         StatusPanel(
             title = "Flight Recorder",
             body = if (state.flightRecorderOn) {
-                "Foreground sampling every 15s. Notification stays visible while active."
+                "Foreground sampling active. Notification stays visible while recording."
             } else {
                 "Enable for continuous forensic timelines (especially overnight). WorkManager alone is too coarse."
             },
@@ -202,17 +186,8 @@ fun HomeScreen(
             onSecondary = onOpenLive,
         )
 
-        Spacer(Modifier.height(8.dp))
-        TextButton(
-            onClick = viewModel::captureNow,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .semantics { contentDescription = "Capture sample now" },
-        ) {
-            Text("Capture sample now")
-        }
-        TextButton(
+        Spacer(Modifier.height(12.dp))
+        Button(
             onClick = onOpenDiagnostics,
             modifier = Modifier
                 .fillMaxWidth()
@@ -221,34 +196,24 @@ fun HomeScreen(
         ) {
             Text("Investigate causes")
         }
+        Spacer(Modifier.height(8.dp))
+        FilledTonalButton(
+            onClick = viewModel::captureNow,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = "Capture sample now" },
+        ) {
+            Text("Capture sample now")
+        }
 
         Spacer(Modifier.height(24.dp))
         HorizontalDivider()
         Spacer(Modifier.height(16.dp))
         SectionHeader("Focus areas")
-        FocusLink("Chemistry", "Ri, voltage sag, wear, charge efficiency") { onOpenChemistry() }
-        FocusLink("Thermal", "ΔT/Δt, charging heat, throttling") { onOpenThermal() }
-        FocusLink("Network", "Signal, transitions, inferred radio-active time") { onOpenNetwork() }
-        FocusLink("Export", "JSON / CSV / HTML / ZIP / Markdown AI report") { onOpenExport() }
-    }
-}
-
-@Composable
-private fun FocusLink(title: String, detail: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp)
-            .semantics { contentDescription = "Open $title" },
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        Text(
-            detail,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-        )
+        FocusNavRow("Chemistry", "Ri, voltage sag, wear, charge efficiency", onOpenChemistry)
+        FocusNavRow("Thermal", "ΔT/Δt, charging heat, throttling", onOpenThermal)
+        FocusNavRow("Network", "Signal, transitions, inferred radio-active time", onOpenNetwork)
+        FocusNavRow("Export", "JSON / CSV / HTML / ZIP / Markdown AI report", onOpenExport)
     }
 }

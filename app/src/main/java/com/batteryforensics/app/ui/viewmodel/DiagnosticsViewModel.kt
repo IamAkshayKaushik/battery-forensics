@@ -121,6 +121,36 @@ class DiagnosticsViewModel @Inject constructor(
                             snap.cmdBattery?.let { c ->
                                 add("cmd battery: level=${c.level ?: "?"} status=${c.statusLine ?: "?"}")
                             }
+                            snap.wifi?.let { w ->
+                                add(
+                                    "Wi-Fi dumpsys: enabled=${w.wifiEnabled} rssi=${w.connectedRssiDbm ?: "?"} " +
+                                        "scanning=${w.isScanning} scans=${w.scanResultCount ?: "?"}",
+                                )
+                            }
+                            snap.connectivity?.let { c ->
+                                add(
+                                    "Connectivity: transports=${c.transports.joinToString().ifBlank { "?" }} " +
+                                        "validated=${c.validated} agents=${c.networkAgentCount ?: "?"}",
+                                )
+                            }
+                            snap.location?.let { l ->
+                                add(
+                                    "Location: providers=${l.providersEnabled.joinToString().ifBlank { "?" }} " +
+                                        "requests=${l.activeRequestHints.take(3).joinToString()}",
+                                )
+                            }
+                            snap.sensors?.let { s ->
+                                add(
+                                    "Sensors: active=${s.activeSensorCount ?: "?"} " +
+                                        "listeners=${s.continuousListenerHints.take(3).joinToString()}",
+                                )
+                            }
+                            snap.notifications?.let { n ->
+                                add(
+                                    "Notifications: active=${n.activeNotificationCount ?: "?"} " +
+                                        "listeners=${n.listenerHints.take(3).joinToString()}",
+                                )
+                            }
                             snap.usageStats?.standbyBucketHints?.take(3)?.forEach { add("Standby: $it") }
                             snap.thermalService?.currentStatus?.let { add("Thermal service: $it") }
                             if (isEmpty() && snap.availability != ShizukuAvailability.Available) {

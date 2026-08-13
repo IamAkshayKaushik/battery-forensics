@@ -5,9 +5,12 @@ import com.batteryforensics.parser.AlarmSummary
 import com.batteryforensics.parser.DeviceIdleSummary
 import com.batteryforensics.parser.DozeTimelineSummary
 import com.batteryforensics.parser.JobSchedulerSummary
+import com.batteryforensics.parser.LocationDumpSummary
 import com.batteryforensics.parser.PackageCount
+import com.batteryforensics.parser.SensorServiceSummary
 import com.batteryforensics.parser.UsageStatsSummary
 import com.batteryforensics.parser.WakeLockSummary
+import com.batteryforensics.parser.WifiDumpSummary
 import com.batteryforensics.ruleengine.rules.DefaultRules
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -17,7 +20,7 @@ class RuleEngineTest {
 
     @Test
     fun defaultRules_countIsExpanded() {
-        assertThat(DefaultRules.all().size).isAtLeast(25)
+        assertThat(DefaultRules.all().size).isAtLeast(34)
     }
 
     @Test
@@ -287,6 +290,52 @@ class RuleEngineTest {
         assertThat(result.map { it.id }).contains("doze_motion_location_interrupts")
         assertThat(result.first { it.id == "doze_motion_location_interrupts" }.confidence.starsLabel)
             .contains("Derived")
+    }
+
+    @Test
+    fun weakWifiDumpsys_triggers() {
+        val priv = PrivilegedEvidence(
+            wifi = WifiDumpSummary(
+                wifiEnabled = true,
+                connectedRssiDbm = -93,
+                isScanning = true,
+                scanResultCount = 10,
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("weak_wifi_dumpsys")
+        assertThat(result.first { it.id == "weak_wifi_dumpsys" }.confidence.starsLabel)
+            .contains("Derived")
+    }
+
+    @Test
+    fun locationProviderActive_isInferred() {
+        val samples = (1..4).map { sample(screenOn = false) }
+        val priv = PrivilegedEvidence(
+            location = LocationDumpSummary(
+                providersEnabled = listOf("gps", "network"),
+                activeRequestHints = listOf("com.maps.nav"),
+                gpsListenerCount = 2,
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = samples, privileged = priv))
+        assertThat(result.map { it.id }).contains("location_provider_active")
+        assertThat(result.first { it.id == "location_provider_active" }.confidence.starsLabel)
+            .contains("Inferred")
+    }
+
+    @Test
+    fun continuousSensorListeners_isInferred() {
+        val priv = PrivilegedEvidence(
+            sensors = SensorServiceSummary(
+                activeSensorCount = 4,
+                continuousListenerHints = listOf("com.fit.tracker", "com.oem.motion"),
+            ),
+        )
+        val result = engine.evaluate(RuleContext(samples = listOf(sample()), privileged = priv))
+        assertThat(result.map { it.id }).contains("continuous_sensor_listeners")
+        assertThat(result.first { it.id == "continuous_sensor_listeners" }.confidence.starsLabel)
+            .contains("Inferred")
     }
 
     @Test

@@ -3,8 +3,10 @@ package com.batteryforensics.app.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,6 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.batteryforensics.app.ui.components.ConfidenceBadge
 import com.batteryforensics.app.ui.components.DiagnosisCard
 import com.batteryforensics.app.ui.components.EmptyInvestigationHint
 import com.batteryforensics.app.ui.components.ForensicScreen
@@ -28,6 +31,8 @@ import com.batteryforensics.app.ui.viewmodel.DiagnosticsViewModel
 import com.batteryforensics.app.ui.viewmodel.DifferentialViewModel
 import com.batteryforensics.diagnostics.NightWindow
 import com.batteryforensics.permissions.AppPermissions
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 
 @Composable
 fun DiagnosticsScreen(
@@ -44,13 +49,27 @@ fun DiagnosticsScreen(
     ) {
         StatusPanel(
             title = "Investigate",
-            body = "Runs the rule engine on the last 12 hours of samples, then (when enabled) Shizuku dumpsys for Doze / wake locks / alarms.",
+            body = "Runs the rule engine on the last 12 hours of samples, then (when enabled) Shizuku dumpsys for Doze / wake locks / alarms / Wi-Fi / location / sensors.",
             primaryAction = if (state.investigating) "Working…" else "Run investigation",
             onPrimary = {
                 permissions.requestMonitoringPermissions()
                 if (!state.investigating) viewModel.investigate()
             },
         )
+        if (state.investigating) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                Text(
+                    "Collecting samples and privileged dumpsys…",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
         SectionHeader(
@@ -116,11 +135,7 @@ fun DiagnosticsScreen(
 
         diff.report?.let { report ->
             SectionHeader("Differential analysis", report.summary)
-            Text(
-                report.confidence.name,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            ConfidenceBadge(report.confidence.name)
             Spacer(Modifier.height(8.dp))
             report.deltas.take(8).forEach { d ->
                 MetricRow(d.label, "${d.healthyValue} → ${d.problemValue} (${d.deltaDisplay})", d.confidence.name)

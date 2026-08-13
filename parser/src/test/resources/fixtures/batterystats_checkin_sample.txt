@@ -1,0 +1,6 @@
+9,0,i,uid,1000,com.android.systemui
+9,0,i,uid,10123,com.example.sync
+com.example.drainy,4200
+wifi_radio,wr,180000
+Estimated battery capacity: 4500 mAh
+Screen: 12.0 (180.0 mAh)
